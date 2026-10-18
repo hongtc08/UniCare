@@ -5,12 +5,16 @@ spring:
   application:
     name: unicare-backend
 
+  config:
+    # Tự động nạp biến môi trường từ file .env (dù chạy từ thư mục gốc hay thư mục backend)
+    import: optional:file:.env[.properties],optional:file:../.env[.properties]
+
   datasource:
-    # Kết nối tới MySQL Online / Cloud (hỗ trợ Aiven, Clever Cloud, Railway, AWS RDS...)
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:unicare_db}?sslMode=PREFERRED&serverTimezone=Asia/Ho_Chi_Minh&characterEncoding=UTF-8
-    username: ${DB_USER:}
-    password: ${DB_PASS:}
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    # Kết nối trực tiếp tới PostgreSQL Online / Cloud (Neon, Supabase, Aiven, Railway...)
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:unicare_db}?sslmode=${DB_SSLMODE:prefer}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:postgres}
+    driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
@@ -19,8 +23,9 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 app:
   jwt:
-    secret: ${JWT_SECRET:unicareSecretKeyForStudentHealthManagementSystem2026UniCareGroup2}
-    expiration: ${JWT_EXPIRATION:86400000} # 24 giờ
+    secret: ${JWT_SECRET:unicareSecretKeyForStudentHealthManagementSystem2026UniCareGroup2VerySecureKeyMustBe256Bits}
+    expiration: ${JWT_EXPIRATION:86400000} # 24 giờ (ms)
