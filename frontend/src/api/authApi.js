@@ -10,8 +10,10 @@ export const authApi = {
   login: (credentials) => axiosClient.post('/auth/login', credentials),
 
   /**
-   * Đổi mật khẩu cá nhân
+   * Đổi mật khẩu cá nhân (UC-01 Luồng B)
    * PUT /api/auth/change-password
+   * @param {{ currentPassword: string, newPassword: string, confirmPassword: string }} data
+   * @returns {Promise<{ message: string }>}
    */
   changePassword: (data) => axiosClient.put('/auth/change-password', data),
 };
