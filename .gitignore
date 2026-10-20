@@ -36,3 +36,17 @@ backend/target/
 .vscode/
 .DS_Store
 
+# --- Frontend (Node / React / Vite) ---
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+dist-ssr/
+frontend/dist-ssr/
+*.local
+frontend/.env.local
+frontend/.env.*.local
+
+# Vite cache
+.vite/
+frontend/.vite/
