@@ -17,12 +17,15 @@ const Login = () => {
   const handleNavigateByRole = (role) => {
     switch (role) {
       case 'SINH_VIEN':
-        navigate('/profile');
+        // Tab đầu tiên của Sinh viên: Bảng điều khiển (/dashboard)
+        navigate('/dashboard');
         break;
       case 'NHAN_VIEN_Y_TE':
+        // Tab đầu tiên của Nhân viên y tế: Lịch hôm nay (/lich-kham)
         navigate('/lich-kham');
         break;
       case 'BAN_QUAN_LY':
+        // Tab đầu tiên của Ban quản lý: Bảng điều hành (/dashboard)
         navigate('/dashboard');
         break;
       default:

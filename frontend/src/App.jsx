@@ -1,8 +1,8 @@
-﻿import React from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import Navbar from './components/Navbar';
+import MainLayout from './components/layout/MainLayout';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -10,28 +10,29 @@ import Profile from './pages/Profile';
 import MedicalList from './pages/MedicalList';
 import Unauthorized from './pages/Unauthorized';
 
-const MainLayout = ({ children }) => (
-  <div className="min-h-screen bg-gray-50 flex flex-col">
-    <Navbar />
-    <main className="flex-1 p-6 max-w-7xl mx-auto w-full">{children}</main>
-  </div>
-);
-
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* Protected Routes */}
+          {/* Protected Routes dùng chung MainLayout (Sidebar + Topbar + Outlet) */}
           <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<MainLayout><Dashboard /></MainLayout>} />
-            <Route path="/profile" element={<MainLayout><Profile /></MainLayout>} />
-            <Route path="/medical-list" element={<MainLayout><MedicalList /></MainLayout>} />
+            <Route element={<MainLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/medical-list" element={<MedicalList />} />
+              <Route path="/lich-kham" element={<MedicalList />} />
+              <Route path="/mental-health" element={<Dashboard />} />
+              <Route path="/health-knowledge" element={<Dashboard />} />
+              <Route path="/emergency" element={<Dashboard />} />
+            </Route>
           </Route>
 
+          {/* Fallback route */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
