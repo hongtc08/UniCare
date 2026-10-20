@@ -1,4 +1,3 @@
-﻿import React from 'react';
 import { Calendar, UserCheck, Clock } from 'lucide-react';
 
 const Dashboard = () => {

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import authApi from '../api/authApi';
 import { Activity, Lock, User, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 
@@ -22,7 +22,7 @@ const Login = () => {
         break;
       case 'NHAN_VIEN_Y_TE':
         // Tab đầu tiên của Nhân viên y tế: Lịch hôm nay (/lich-kham)
-        navigate('/lich-kham');
+        navigate('/medical-list');
         break;
       case 'BAN_QUAN_LY':
         // Tab đầu tiên của Ban quản lý: Bảng điều hành (/dashboard)

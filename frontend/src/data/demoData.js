@@ -1,0 +1,147 @@
+// Synthetic records only. Never copy production personal or medical data here.
+export const demoData = {
+  accounts: [
+    {
+      id: "u1",
+      username: "24520579",
+      fullName: "Nguyễn Minh Khang",
+      role: "SINH_VIEN",
+      status: "ACTIVE",
+    },
+    {
+      id: "u2",
+      username: "24520437",
+      fullName: "Trần Thảo Linh",
+      role: "SINH_VIEN",
+      status: "ACTIVE",
+    },
+    {
+      id: "u3",
+      username: "BS001",
+      fullName: "Lê Minh Anh",
+      role: "NHAN_VIEN_Y_TE",
+      status: "ACTIVE",
+    },
+    {
+      id: "u4",
+      username: "QL001",
+      fullName: "Phạm Hoàng Nam",
+      role: "BAN_QUAN_LY",
+      status: "ACTIVE",
+    },
+    {
+      id: "u5",
+      username: "24521643",
+      fullName: "Võ Ngọc Hà",
+      role: "SINH_VIEN",
+      status: "LOCKED",
+    },
+    {
+      id: "u6",
+      username: "BS002",
+      fullName: "Đặng Thu Hương",
+      role: "NHAN_VIEN_Y_TE",
+      status: "ACTIVE",
+    },
+    {
+      id: "u7",
+      username: "24521761",
+      fullName: "Bùi Gia Hân",
+      role: "SINH_VIEN",
+      status: "ACTIVE",
+    },
+    {
+      id: "u8",
+      username: "24521984",
+      fullName: "Đỗ Tuấn Kiệt",
+      role: "SINH_VIEN",
+      status: "LOCKED",
+    },
+  ],
+  faculties: [
+    {
+      id: "f1",
+      code: "CNPM",
+      name: "Công nghệ Phần mềm",
+      description: "Đào tạo kỹ sư công nghệ phần mềm.",
+    },
+    {
+      id: "f2",
+      code: "KHMT",
+      name: "Khoa học Máy tính",
+      description: "Khoa học máy tính và trí tuệ nhân tạo.",
+    },
+    {
+      id: "f3",
+      code: "HTTT",
+      name: "Hệ thống Thông tin",
+      description: "Hệ thống thông tin và công nghệ dữ liệu.",
+    },
+    {
+      id: "f4",
+      code: "MMT",
+      name: "Mạng máy tính và Truyền thông",
+      description: "Mạng máy tính và an toàn thông tin.",
+    },
+    {
+      id: "f5",
+      code: "KTMT",
+      name: "Kỹ thuật Máy tính",
+      description: "Kỹ thuật máy tính và hệ thống nhúng.",
+    },
+  ],
+  classes: [
+    {
+      id: "c1",
+      code: "KTPM2024",
+      name: "Kỹ thuật phần mềm 2024",
+      facultyId: "f1",
+      cohort: "2024",
+    },
+    {
+      id: "c2",
+      code: "KHMT2024",
+      name: "Khoa học máy tính 2024",
+      facultyId: "f2",
+      cohort: "2024",
+    },
+  ],
+  "disease-groups": [
+    {
+      id: "d1",
+      code: "HH",
+      name: "Bệnh hô hấp",
+      description: "Các bệnh thuộc hệ hô hấp.",
+    },
+    {
+      id: "d2",
+      code: "TH",
+      name: "Bệnh tiêu hóa",
+      description: "Các bệnh thuộc hệ tiêu hóa.",
+    },
+    {
+      id: "d3",
+      code: "CXK",
+      name: "Bệnh cơ xương khớp",
+      description: "Các bệnh cơ, xương và khớp.",
+    },
+  ],
+  medicines: [
+    {
+      id: "m1",
+      code: "PARA500",
+      name: "Paracetamol",
+      unit: "Viên",
+      strength: "500 mg",
+      description: "",
+    },
+    {
+      id: "m2",
+      code: "ORESOL",
+      name: "Oresol",
+      unit: "Gói",
+      strength: "4,1 g",
+      description: "",
+    },
+  ],
+};
