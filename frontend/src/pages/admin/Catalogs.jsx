@@ -15,7 +15,6 @@ import { adminApi } from "../../api/adminApi";
 import { useResource } from "../../hooks/useResource";
 import {
   ConfirmAction,
-  DataNotice,
   DataTable,
   Feedback,
   PageHeading,
@@ -214,7 +213,6 @@ export default function Catalogs() {
         title="Danh mục dùng chung"
         description="Chuẩn hóa dữ liệu đào tạo và y tế trong toàn hệ thống."
       />
-      <DataNotice />
       <nav className="catalog-tabs" aria-label="Loại danh mục">
         {Object.entries(catalogConfig).map(([key, config]) => {
           const Icon = catalogIcons[key];

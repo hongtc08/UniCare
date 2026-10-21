@@ -15,7 +15,6 @@ import { adminApi } from "../../api/adminApi";
 import { ROLE_LABELS, roleOptions } from "../../config/roles";
 import {
   ConfirmAction,
-  DataNotice,
   DataTable,
   Feedback,
   PageHeading,
@@ -219,7 +218,6 @@ export default function Accounts() {
           </button>
         }
       />
-      <DataNotice />
       <div className="stats-grid">
         {stats.map(({ label, value, icon: Icon, color }) => (
           <div className="stat-panel" key={label}>
