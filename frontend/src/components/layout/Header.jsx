@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronDown, KeyRound, LogOut, Menu, User } from "lucide-react";
+import { Bell, ChevronDown, KeyRound, LogOut, Menu, Search, User } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth";
 import { ROLE_LABELS } from "../../config/roles";
+import { navigation } from "../../config/navigation";
+import { normalizeSearch } from "../../utils/search";
 import ChangePasswordModal from "../ChangePasswordModal";
 
 export default function Header({ onOpenSidebar }) {
@@ -10,6 +12,11 @@ export default function Header({ onOpenSidebar }) {
   const navigate = useNavigate();
   const [panel, setPanel] = useState(null);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRegion = useRef(null);
+  const searchInput = useRef(null);
+  const searchResults = (navigation[user?.role] || []).filter((item) => normalizeSearch(item.label).includes(normalizeSearch(query.trim())));
   const region = useRef(null);
   const trigger = useRef(null);
   const name = user?.fullName || user?.name || user?.username || "Người dùng";
@@ -23,11 +30,18 @@ export default function Header({ onOpenSidebar }) {
   useEffect(() => {
     function outside(event) {
       if (!region.current?.contains(event.target)) setPanel(null);
+      if (!searchRegion.current?.contains(event.target)) setSearchOpen(false);
     }
     function escape(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInput.current?.focus();
+        setSearchOpen(true);
+      }
       if (event.key === "Escape") {
+        setSearchOpen(false);
         setPanel(null);
-        trigger.current?.focus();
+        if (region.current?.contains(document.activeElement)) trigger.current?.focus();
       }
     }
     document.addEventListener("pointerdown", outside);
@@ -54,10 +68,31 @@ export default function Header({ onOpenSidebar }) {
           >
             <Menu size={21} />
           </button>
-          <span className="header-caption">
-            Hệ thống Quản lý Y tế Sinh viên
-          </span>
-          <span className="mobile-brand">UniCare</span>
+          <div className="header-search" ref={searchRegion} onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false);
+          }}>
+            <form role="search" onSubmit={(event) => {
+              event.preventDefault();
+              if (searchResults.length) {
+                navigate(searchResults[0].to);
+                setSearchOpen(false);
+                searchInput.current?.blur();
+              }
+            }}>
+              <Search size={17} aria-hidden="true" />
+              <input ref={searchInput} aria-label="Tìm kiếm chức năng" placeholder="Tìm sinh viên, hồ sơ, lịch khám..." value={query}
+                onFocus={() => setSearchOpen(true)} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true); }}
+                aria-expanded={searchOpen} aria-controls="header-search-results" />
+              <kbd title="Ctrl K hoặc Command K">⌘ K</kbd>
+            </form>
+            {searchOpen && <div className="header-search-results" id="header-search-results">
+              <p>Tìm nhanh chức năng</p>
+              {searchResults.map(({ to, label, icon: Icon }) => <button key={to} type="button" onClick={() => {
+                navigate(to); setSearchOpen(false); setQuery(""); searchInput.current?.focus(); setSearchOpen(false);
+              }}><Icon size={17} />{label}</button>)}
+              {!searchResults.length && <p>Không tìm thấy chức năng phù hợp.</p>}
+            </div>}
+          </div>
         </div>
         <div className="header-actions" ref={region}>
           <button
