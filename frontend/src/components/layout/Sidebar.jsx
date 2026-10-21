@@ -1,39 +1,9 @@
 import { NavLink } from "react-router-dom";
-import {
-  Activity,
-  BookOpen,
-  Calendar,
-  Clock,
-  FolderTree,
-  Heart,
-  HeartPulse,
-  LayoutDashboard,
-  Menu,
-  ShieldCheck,
-  Users,
-  X,
-} from "lucide-react";
+import { Heart, Menu, MessageSquare, X } from "lucide-react";
+import { navigation } from "../../config/navigation";
 import { useAuth } from "../../hooks/useAuth";
 import { ROLE_LABELS } from "../../config/roles";
 
-const navigation = {
-  SINH_VIEN: [
-    { to: "/dashboard", label: "Bảng điều khiển", icon: LayoutDashboard },
-    { to: "/profile", label: "Trang cá nhân", icon: Heart },
-    { to: "/mental-health", label: "Sức khỏe tinh thần", icon: Activity },
-    { to: "/lich-kham", label: "Lịch khám", icon: Calendar },
-    { to: "/health-knowledge", label: "Kiến thức sức khỏe", icon: BookOpen },
-  ],
-  NHAN_VIEN_Y_TE: [
-    { to: "/medical-list", label: "Danh sách khám", icon: Clock },
-    { to: "/profile", label: "Trang cá nhân", icon: Heart },
-  ],
-  BAN_QUAN_LY: [
-    { to: "/dashboard", label: "Bảng điều hành", icon: LayoutDashboard },
-    { to: "/admin/accounts", label: "Quản lý tài khoản", icon: Users },
-    { to: "/admin/catalogs", label: "Danh mục dùng chung", icon: FolderTree },
-  ],
-};
 
 export default function Sidebar({
   collapsed,
@@ -47,14 +17,18 @@ export default function Sidebar({
       className={`app-sidebar ${collapsed ? "is-collapsed" : ""} ${mobile ? "is-mobile" : ""}`}
     >
       <div className="sidebar-brand">
-        <span className="brand-icon">
-          <HeartPulse size={23} />
-        </span>
+        {collapsed && !mobile ? (
+          <button className="brand-icon" onClick={onToggle} aria-label="Mở rộng menu" title="Mở rộng menu" aria-expanded={false}>
+            <Heart size={23} />
+          </button>
+        ) : (
+          <span className="brand-icon"><Heart size={23} /></span>
+        )}
         <div className="sidebar-label">
           <strong>UniCare</strong>
           <small>Y TẾ HỌC ĐƯỜNG</small>
         </div>
-        <button
+        {(!collapsed || mobile) && <button
           className="icon-button sidebar-toggle"
           aria-label={
             mobile
@@ -66,7 +40,7 @@ export default function Sidebar({
           onClick={onToggle}
         >
           {mobile ? <X size={19} /> : <Menu size={19} />}
-        </button>
+        </button>}
       </div>
       <nav className="sidebar-nav" aria-label="Điều hướng chính">
         <p className="nav-label sidebar-label">{ROLE_LABELS[user?.role]}</p>
@@ -74,6 +48,7 @@ export default function Sidebar({
           <NavLink
             key={to}
             to={to}
+            aria-label={label}
             title={collapsed ? label : undefined}
             onClick={onNavigate}
             className={({ isActive }) =>
@@ -86,10 +61,11 @@ export default function Sidebar({
         ))}
       </nav>
       <div className="sidebar-footer">
-        <ShieldCheck size={21} />
+        <MessageSquare size={21} />
         <div className="sidebar-label">
-          <strong>Y tế học đường</strong>
-          <p>Chăm sóc sức khỏe sinh viên</p>
+          <strong>Cần hỗ trợ?</strong>
+          <p>Đường dây khẩn cấp</p>
+          <p>+1 (555) 010-CARE</p>
         </div>
       </div>
     </aside>
