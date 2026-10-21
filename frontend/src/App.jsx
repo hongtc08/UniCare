@@ -47,6 +47,7 @@ export default function App() {
                 element={<ProtectedRoute allowedRoles={["NHAN_VIEN_Y_TE"]} />}
               >
                 <Route path="/medical-list" element={<MedicalList />} />
+                <Route path="/medical-records" element={<UpcomingFeature />} />
                 <Route path="/emergency" element={<UpcomingFeature />} />
               </Route>
               <Route
@@ -65,6 +66,9 @@ export default function App() {
               <Route
                 element={<ProtectedRoute allowedRoles={["BAN_QUAN_LY"]} />}
               >
+                <Route path="/admin/reports" element={<UpcomingFeature />} />
+                <Route path="/admin/notifications" element={<UpcomingFeature />} />
+                <Route path="/admin/settings" element={<UpcomingFeature />} />
                 <Route path="/admin/accounts" element={<Accounts />} />
                 <Route
                   path="/admin/catalogs"
