@@ -4,11 +4,10 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Database,
   Search,
 } from "lucide-react";
 import Modal from "../Modal";
-import { isDemoMode, errorMessage } from "../../api/adminApi";
+import { errorMessage } from "../../api/adminApi";
 
 export function PageHeading({ title, description, action }) {
   return (
@@ -18,16 +17,6 @@ export function PageHeading({ title, description, action }) {
         <p>{description}</p>
       </div>
       {action}
-    </div>
-  );
-}
-
-export function DataNotice() {
-  if (!isDemoMode) return null;
-  return (
-    <div className="demo-notice">
-      <Database size={16} />
-      <span>Chế độ dữ liệu mẫu · Thay đổi chỉ lưu trên trình duyệt này.</span>
     </div>
   );
 }
@@ -93,7 +82,9 @@ export function DataTable({
 
   return (
     <>
-      <p className="table-scroll-hint">Cuộn ngang bảng để xem đầy đủ và thao tác.</p>
+      <p className="table-scroll-hint">
+        Cuộn ngang bảng để xem đầy đủ và thao tác.
+      </p>
       <div
         className="table-scroll"
         role="region"

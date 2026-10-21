@@ -1,4 +1,4 @@
-import axiosClient from './axiosClient';
+import axiosClient from "./axiosClient";
 
 export const authApi = {
   /**
@@ -7,7 +7,7 @@ export const authApi = {
    * @param {{ username: string, password: string }} credentials
    * @returns {Promise<{ token: string, tokenType: string, username: string, fullName: string, role: 'SINH_VIEN' | 'NHAN_VIEN_Y_TE' | 'BAN_QUAN_LY' }>}
    */
-  login: (credentials) => axiosClient.post('/auth/login', credentials),
+  login: (credentials) => axiosClient.post("/auth/login", credentials),
 
   /**
    * Đổi mật khẩu cá nhân (UC-01 Luồng B)
@@ -15,7 +15,7 @@ export const authApi = {
    * @param {{ currentPassword: string, newPassword: string, confirmPassword: string }} data
    * @returns {Promise<{ message: string }>}
    */
-  changePassword: (data) => axiosClient.put('/auth/change-password', data),
+  changePassword: (data) => axiosClient.put("/auth/change-password", data),
 };
 
 export default authApi;
