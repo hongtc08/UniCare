@@ -23,13 +23,9 @@ const MedicalList = () => {
           </thead>
           <tbody className="divide-y divide-gray-200">
             <tr>
-              <td className="px-6 py-4 font-medium text-gray-900">PK-001</td>
-              <td className="px-6 py-4">KHAM_DA_KHOA</td>
-              <td className="px-6 py-4">2026-10-25 08:30</td>
-              <td className="px-6 py-4">
-                <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
-                  DA_XAC_NHAN
-                </span>
+              <td colSpan={4} className="px-6 py-8 text-center text-slate-600">
+                API danh sách khám chưa được tích hợp. Chưa có dữ liệu để hiển
+                thị.
               </td>
             </tr>
           </tbody>
