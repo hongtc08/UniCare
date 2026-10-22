@@ -1,14 +1,23 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import authApi from '../api/authApi';
-import { Activity, Lock, User, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import authApi from "../api/authApi";
+
+import {
+  Activity,
+  Lock,
+  User,
+  AlertCircle,
+  Loader2,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 
 const Login = () => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   const { login } = useAuth();
@@ -16,27 +25,26 @@ const Login = () => {
 
   const handleNavigateByRole = (role) => {
     switch (role) {
-      case 'SINH_VIEN':
-        // Tab đầu tiên của Sinh viên: Bảng điều khiển (/dashboard)
-        navigate('/dashboard');
+      case "SINH_VIEN":
+        navigate("/profile");
         break;
-      case 'NHAN_VIEN_Y_TE':
+      case "NHAN_VIEN_Y_TE":
         // Tab đầu tiên của Nhân viên y tế: Lịch hôm nay (/lich-kham)
-        navigate('/lich-kham');
+        navigate("/medical-list");
         break;
-      case 'BAN_QUAN_LY':
+      case "BAN_QUAN_LY":
         // Tab đầu tiên của Ban quản lý: Bảng điều hành (/dashboard)
-        navigate('/dashboard');
+        navigate("/dashboard");
         break;
       default:
-        navigate('/dashboard');
+        navigate("/dashboard");
         break;
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrorMessage('');
+    setErrorMessage("");
     setLoading(true);
 
     try {
@@ -46,7 +54,7 @@ const Login = () => {
         password: password,
       });
 
-      const { token, role, fullName } = response;
+      const { token, role, fullName } = response?.data ?? response;
 
       // Lưu trữ state xác thực
       login({ username, fullName, role }, token);
@@ -58,10 +66,10 @@ const Login = () => {
       const message =
         error.response?.data?.message ||
         (error.response?.status === 401
-          ? 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+          ? "Tên đăng nhập hoặc mật khẩu không chính xác."
           : error.response?.status === 403
-          ? 'Tài khoản của bạn đã bị khóa hoặc không có quyền truy cập.'
-          : 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
+            ? "Tài khoản của bạn đã bị khóa hoặc không có quyền truy cập."
+            : "Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
       setErrorMessage(message);
     } finally {
       setLoading(false);
@@ -77,7 +85,9 @@ const Login = () => {
           </div>
         </div>
 
-        <h2 className="text-2xl font-bold text-center text-gray-800">Hệ thống Y tế UniCare</h2>
+        <h2 className="text-2xl font-bold text-center text-gray-800">
+          Hệ thống Y tế UniCare
+        </h2>
         <p className="text-sm text-center text-gray-500 mt-1 mb-6">
           Đăng nhập hệ thống chăm sóc sức khỏe sinh viên
         </p>
@@ -112,7 +122,7 @@ const Login = () => {
                 <Lock className="w-5 h-5" />
               </span>
               <input
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? "text" : "password"}
                 required
                 disabled={loading}
                 className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:bg-gray-100"

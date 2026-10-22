@@ -1,22 +1,55 @@
-﻿import React from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useId, useRef } from "react";
+import { X } from "lucide-react";
 
-const Modal = ({ isOpen, onClose, title, children }) => {
+export default function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+  busy = false,
+}) {
+  const dialog = useRef(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previous = document.activeElement;
+    const element = dialog.current;
+    element.showModal();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      element.close();
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="p-6">{children}</div>
+    <dialog
+      ref={dialog}
+      className="app-dialog"
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!busy) onClose();
+      }}
+    >
+      <div className="dialog-heading">
+        <h2 id={titleId}>{title}</h2>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Đóng hộp thoại"
+          disabled={busy}
+          onClick={onClose}
+        >
+          <X size={20} />
+        </button>
       </div>
-    </div>
+      <div className="dialog-body">{children}</div>
+    </dialog>
   );
-};
-
-export default Modal;
+}

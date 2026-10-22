@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import authApi from '../api/authApi';
 import { X, Lock, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 
@@ -212,4 +212,3 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
 };
 
 export default ChangePasswordModal;
-
