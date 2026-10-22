@@ -15,7 +15,7 @@
 	<description>Hệ thống Quản lý Sức khỏe Sinh viên - Backend API</description>
 
 	<properties>
-		<java.version>25</java.version>
+		<java.version>21</java.version>
 		<!-- Bỏ qua kiểm tra Coverage cho các class không chứa logic nghiệp vụ -->
 		<sonar.coverage.exclusions>
 			**/dto/**,
