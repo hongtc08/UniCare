@@ -60,11 +60,32 @@ test("reject failure envelopes and unexpected paginated responses", async () => 
   const failure = await adapter({ success: false, message: "Không có quyền" });
   await assert.rejects(failure.adminApi.list("accounts"), /Không có quyền/);
   const paginated = await adapter({ success: true, data: { content: [] } });
-  await assert.rejects(paginated.adminApi.list("accounts"), /danh sách đầy đủ/);
+  await assert.rejects(paginated.adminApi.list("accounts"), /chưa đúng định dạng/);
 });
 
 test("catalog payload and endpoint remain compatible", async () => {
   const { adminApi, calls } = await adapter({ data: { id: 2 } });
   await adminApi.save("faculties", { id: 2, code: "CNTT", name: "Công nghệ thông tin" });
   assert.deepEqual(calls[0], { method: "put", args: ["/catalogs/faculties/2", { code: "CNTT", name: "Công nghệ thông tin" }] });
+});
+
+for (const resource of ["faculties", "classes", "disease-groups", "medicines"]) {
+  test(`catalog CRUD contract: ${resource}`, async () => {
+    const { adminApi, calls } = await adapter({ success: true, data: [] });
+    await adminApi.list(resource);
+    await adminApi.save(resource, { code: "TEST", name: "Kiểm thử" });
+    await adminApi.save(resource, { id: 10, code: "TEST", name: "Đã sửa" });
+    await adminApi.remove(resource, 10);
+    assert.deepEqual(calls.map(({ method, args }) => [method, args[0]]), [
+      ["get", `/catalogs/${resource}`], ["post", `/catalogs/${resource}`],
+      ["put", `/catalogs/${resource}/10`], ["delete", `/catalogs/${resource}/10`],
+    ]);
+  });
+}
+
+test("delete handles empty 204 response and rejects failure envelope", async () => {
+  const empty = await adapter(undefined);
+  assert.equal(await empty.adminApi.remove("faculties", 2), undefined);
+  const rejected = await adapter({ success: false, message: "Khoa đang được sử dụng" });
+  await assert.rejects(rejected.adminApi.remove("faculties", 2), /đang được sử dụng/);
 });

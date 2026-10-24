@@ -15,7 +15,7 @@ export const adminApi = {
     const result = unwrap(await axiosClient.get(endpoint(resource)));
     if (!Array.isArray(result))
       throw new Error(
-        "API cần trả về danh sách đầy đủ. Kiểm tra hợp đồng API trong ADMIN_UI.md.",
+        "Dữ liệu danh sách trả về chưa đúng định dạng. Vui lòng liên hệ nhóm backend.",
       );
     return result;
   },
@@ -54,9 +54,9 @@ export const adminApi = {
     );
   },
   async remove(resource, id) {
-    return axiosClient.delete(
+    return unwrap(await axiosClient.delete(
       `${endpoint(resource)}/${encodeURIComponent(id)}`,
-    );
+    ));
   },
 };
 

@@ -163,6 +163,7 @@ export function RecordForm({
   onSave,
   onClose,
   submitLabel = "Lưu thay đổi",
+  submitDisabled = false,
   note,
 }) {
   const [values, setValues] = useState(initialValues);
@@ -171,6 +172,7 @@ export function RecordForm({
 
   async function submit(event) {
     event.preventDefault();
+    if (busy || submitDisabled) return;
     const cleaned = Object.fromEntries(
       Object.entries(values).map(([key, value]) => [
         key,
@@ -253,7 +255,7 @@ export function RecordForm({
           >
             Hủy
           </button>
-          <button className="button primary" disabled={busy}>
+          <button className="button primary" disabled={busy || submitDisabled}>
             {busy ? "Đang lưu…" : submitLabel}
           </button>
         </div>
