@@ -1,10 +1,11 @@
 import axiosClient from "./axiosClient";
 
 function unwrap(response) {
+  if (response?.success === false) throw new Error(response.message || "Thao tác không thành công.");
   return response?.data ?? response;
 }
 
-// Pending BE2/BE3 contract; no sample-data fallback.
+// Accounts follow BE3 AdminUserController; catalog endpoints await BE2.
 function endpoint(resource) {
   return resource === "accounts" ? "/admin/users" : `/catalogs/${resource}`;
 }
@@ -19,7 +20,15 @@ export const adminApi = {
     return result;
   },
   async save(resource, record) {
-    const { id, ...payload } = record;
+    const { id, ...fields } = record;
+    // BE3 accepts only fullName/role on update; status uses its own endpoint.
+    const payload = resource === "accounts"
+      ? {
+          ...(!id ? { username: fields.username.trim() } : {}),
+          fullName: fields.fullName.trim(),
+          role: fields.role,
+        }
+      : fields;
     return unwrap(
       await (id
         ? axiosClient.put(
@@ -52,6 +61,7 @@ export const adminApi = {
 };
 
 export function errorMessage(error) {
+  if (error.response?.data?.message) return error.response.data.message;
   if (error.response?.status === 404)
     return "API chưa khả dụng. Vui lòng liên hệ nhóm backend hoặc thử lại sau.";
   if (!error.response && error.code === "ERR_NETWORK")

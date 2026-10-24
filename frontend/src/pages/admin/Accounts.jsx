@@ -6,6 +6,7 @@ import {
   LockKeyholeOpen,
   Pencil,
   Plus,
+  RefreshCw,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -90,7 +91,7 @@ export default function Accounts() {
           <div>
             <strong>{record.fullName}</strong>
             <span>
-              {record.username === user?.username
+              {record.username?.toLowerCase() === user?.username?.toLowerCase()
                 ? "Tài khoản của bạn"
                 : `Mã: ${record.username}`}
             </span>
@@ -130,7 +131,7 @@ export default function Accounts() {
       key: "actions",
       label: "Thao tác",
       render: (record) => {
-        const self = record.username === user?.username;
+        const self = record.username?.toLowerCase() === user?.username?.toLowerCase();
         return (
           <div className="row-actions">
             <button
@@ -243,7 +244,9 @@ export default function Accounts() {
             </h2>
             <p>Tra cứu, cập nhật và quản lý trạng thái người dùng.</p>
           </div>
-          <span className="panel-caption">3 vai trò hệ thống</span>
+          <button type="button" className="button secondary" onClick={reload} disabled={loading}>
+            <RefreshCw size={16} /> Tải lại
+          </button>
         </div>
         <div className="table-toolbar">
           <SearchField
@@ -279,6 +282,7 @@ export default function Accounts() {
           loading={loading}
           error={error}
           onRetry={reload}
+          emptyText={query || role || status ? "Thử thay đổi từ khóa hoặc bộ lọc." : "Chưa có tài khoản. Chọn Thêm tài khoản để tạo mới."}
           page={page}
           onPageChange={setPage}
         />
@@ -296,6 +300,7 @@ export default function Accounts() {
             {
               name: "username",
               label: "Tên đăng nhập / MSSV / Mã nhân viên",
+              minLength: 3,
               maxLength: 50,
               disabled: Boolean(editing.id),
             },
@@ -303,13 +308,13 @@ export default function Accounts() {
               name: "role",
               label: "Vai trò",
               options: roleOptions,
-              disabled: editing.username === user?.username,
+              disabled: editing.username?.toLowerCase() === user?.username?.toLowerCase(),
             },
           ]}
           note={
             editing.id
               ? "Tên đăng nhập không thay đổi. Khóa/mở khóa qua thao tác riêng trong bảng."
-              : "Mật khẩu mặc định do máy chủ cấp theo chính sách của hệ thống."
+              : "Tài khoản mới ở trạng thái hoạt động, mật khẩu mặc định: UniCare@123."
           }
           onSave={save}
           onClose={() => setEditing(null)}
@@ -327,7 +332,7 @@ export default function Accounts() {
           }
           description={
             action.type === "reset"
-              ? `Cấp lại mật khẩu mặc định cho ${action.record.fullName} (${action.record.username}). Mật khẩu hiện tại sẽ không còn hiệu lực.`
+              ? `Cấp lại mật khẩu mặc định UniCare@123 cho ${action.record.fullName} (${action.record.username}). Mật khẩu hiện tại sẽ không còn hiệu lực.`
               : `${action.record.fullName} (${action.record.username}) sẽ ${action.record.status === "ACTIVE" ? "không thể" : "có thể"} đăng nhập hệ thống.`
           }
           confirmLabel={

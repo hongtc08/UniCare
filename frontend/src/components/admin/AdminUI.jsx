@@ -185,6 +185,11 @@ export function RecordForm({
       setError("Vui lòng điền đầy đủ các trường bắt buộc.");
       return;
     }
+    const invalidLength = fields.find((field) => !field.disabled && field.minLength && String(cleaned[field.name] ?? "").length < field.minLength);
+    if (invalidLength) {
+      setError(`${invalidLength.label} phải có ít nhất ${invalidLength.minLength} ký tự.`);
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -209,6 +214,7 @@ export function RecordForm({
             required: !field.optional,
             disabled: busy || field.disabled,
             maxLength: field.maxLength || 500,
+            minLength: field.minLength,
             onChange: (event) =>
               setValues((current) => ({
                 ...current,
