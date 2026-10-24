@@ -35,7 +35,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public List<UserResponse> getUsers(String search, Role role, UserStatus status) {
-        String cleanSearch = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+        String cleanSearch = search == null ? "" : search.trim();
         List<User> users = userRepository.searchUsers(cleanSearch, role, status);
         return users.stream()
                 .map(UserResponse::fromEntity)

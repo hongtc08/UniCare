@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { adminApi, errorMessage } from "../api/adminApi";
 
-export function useResource(resource) {
+export function useResource(resource, enabled = true) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -13,6 +13,7 @@ export function useResource(resource) {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     adminApi
       .list(resource)
@@ -31,7 +32,7 @@ export function useResource(resource) {
     return () => {
       active = false;
     };
-  }, [resource, revision]);
+  }, [resource, revision, enabled]);
 
   return { records, loading, error, reload };
 }

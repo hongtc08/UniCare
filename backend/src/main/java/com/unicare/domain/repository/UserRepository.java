@@ -21,12 +21,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUsernameIgnoreCase(String username);
 
     @Query("SELECT u FROM User u WHERE " +
-           "(:search IS NULL OR TRIM(:search) = '' OR " +
-           "LOWER(u.username) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(u.fullName) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
-           "(:role IS NULL OR u.role = :role) AND " +
-           "(:status IS NULL OR u.status = :status) " +
-           "ORDER BY u.id DESC")
+       "(:search = '' OR " +
+       "LOWER(u.username) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+       "LOWER(u.fullName) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
+       "(:role IS NULL OR u.role = :role) AND " +
+       "(:status IS NULL OR u.status = :status) " +
+       "ORDER BY u.id DESC")
     List<User> searchUsers(@Param("search") String search,
                            @Param("role") Role role,
                            @Param("status") UserStatus status);

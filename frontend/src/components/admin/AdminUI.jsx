@@ -163,6 +163,7 @@ export function RecordForm({
   onSave,
   onClose,
   submitLabel = "Lưu thay đổi",
+  submitDisabled = false,
   note,
 }) {
   const [values, setValues] = useState(initialValues);
@@ -171,6 +172,7 @@ export function RecordForm({
 
   async function submit(event) {
     event.preventDefault();
+    if (busy || submitDisabled) return;
     const cleaned = Object.fromEntries(
       Object.entries(values).map(([key, value]) => [
         key,
@@ -183,6 +185,11 @@ export function RecordForm({
       )
     ) {
       setError("Vui lòng điền đầy đủ các trường bắt buộc.");
+      return;
+    }
+    const invalidLength = fields.find((field) => !field.disabled && field.minLength && String(cleaned[field.name] ?? "").length < field.minLength);
+    if (invalidLength) {
+      setError(`${invalidLength.label} phải có ít nhất ${invalidLength.minLength} ký tự.`);
       return;
     }
     setBusy(true);
@@ -209,6 +216,7 @@ export function RecordForm({
             required: !field.optional,
             disabled: busy || field.disabled,
             maxLength: field.maxLength || 500,
+            minLength: field.minLength,
             onChange: (event) =>
               setValues((current) => ({
                 ...current,
@@ -247,7 +255,7 @@ export function RecordForm({
           >
             Hủy
           </button>
-          <button className="button primary" disabled={busy}>
+          <button className="button primary" disabled={busy || submitDisabled}>
             {busy ? "Đang lưu…" : submitLabel}
           </button>
         </div>

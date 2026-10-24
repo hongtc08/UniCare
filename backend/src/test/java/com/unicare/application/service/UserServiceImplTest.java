@@ -52,7 +52,7 @@ class UserServiceImplTest {
     @Test
     @DisplayName("Lấy danh sách tài khoản thành công")
     void getUsers_Success() {
-        when(userRepository.searchUsers(null, null, null)).thenReturn(List.of(sampleUser));
+        when(userRepository.searchUsers("", null, null)).thenReturn(List.of(sampleUser));
 
         List<UserResponse> responses = userService.getUsers(null, null, null);
 
