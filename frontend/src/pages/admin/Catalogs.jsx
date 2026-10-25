@@ -8,6 +8,7 @@ import {
   Pencil,
   Pill,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { catalogConfig } from "../../config/catalogs";
@@ -32,8 +33,9 @@ const catalogIcons = {
 function CatalogContent({ resource }) {
   const config = catalogConfig[resource];
   const { records, loading, error, reload } = useResource(resource);
-  const faculties = useResource("faculties");
+  const faculties = useResource("faculties", resource === "classes");
   const [query, setQuery] = useState("");
+  const [facultyFilter, setFacultyFilter] = useState("");
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
@@ -42,15 +44,18 @@ function CatalogContent({ resource }) {
   const facultyName = (id) =>
     faculties.records.find((faculty) => String(faculty.id) === String(id))
       ?.name || "Chưa tải được khoa";
+  const facultyUnavailable = resource === "classes" && (faculties.loading || Boolean(faculties.error) || !faculties.records.length);
   const filtered = records.filter((record) =>
     normalizeSearch(
-      `${record.code} ${record.name} ${record.cohort || ""}`,
-    ).includes(normalizeSearch(query)),
+      `${record.code} ${record.name} ${record.cohort || ""} ${record.unit || ""} ${record.strength || ""}`,
+    ).includes(normalizeSearch(query.trim())) &&
+      (!facultyFilter || String(record.facultyId) === facultyFilter),
   );
   const fields = config.fields.map((field) =>
     field.source
       ? {
           ...field,
+          disabled: facultyUnavailable,
           options: faculties.records.map((faculty) => ({
             value: faculty.id,
             label: faculty.name,
@@ -105,7 +110,16 @@ function CatalogContent({ resource }) {
   ];
 
   async function save(values) {
-    await adminApi.save(resource, values);
+    if (resource === "classes" && (facultyUnavailable || !faculties.records.some((faculty) => String(faculty.id) === String(values.facultyId)))) {
+      throw new Error("Vui lòng tải danh sách khoa và chọn khoa hợp lệ trước khi lưu lớp.");
+    }
+    const duplicate = records.some((record) => String(record.id) !== String(values.id) && record.code.trim().toLowerCase() === values.code.trim().toLowerCase());
+    if (duplicate) throw new Error("Mã danh mục đã tồn tại. Vui lòng dùng mã khác.");
+    // Only send editable catalog fields, not server-managed properties.
+    const payload = Object.fromEntries(config.fields.map((field) => [field.name, values[field.name] ?? ""]));
+    if (values.id != null) payload.id = values.id;
+    if (resource === "classes") payload.facultyId = faculties.records.find((faculty) => String(faculty.id) === String(values.facultyId)).id;
+    await adminApi.save(resource, payload);
     setMessage(`Đã ${editing.id ? "cập nhật" : "thêm"} ${config.singular}.`);
     reload();
   }
@@ -117,12 +131,13 @@ function CatalogContent({ resource }) {
           <div>
             <h2>
               Danh sách {config.singular}{" "}
-              <span className="count-badge">{records.length}</span>
+              <span className="count-badge">{loading || error ? "—" : records.length}</span>
             </h2>
             <p>{config.description}</p>
           </div>
           <button
             className="button primary"
+            disabled={facultyUnavailable}
             onClick={() =>
               setEditing(
                 Object.fromEntries(
@@ -144,8 +159,25 @@ function CatalogContent({ resource }) {
             }}
             placeholder={`Tìm mã hoặc tên ${config.singular}…`}
           />
-          <span className="panel-caption">{filtered.length} kết quả</span>
+          {resource === "classes" && (
+            <select aria-label="Lọc theo khoa" value={facultyFilter} disabled={facultyUnavailable}
+              onChange={(event) => { setFacultyFilter(event.target.value); setPage(1); }}>
+              <option value="">Tất cả khoa</option>
+              {faculties.records.map((faculty) => <option key={faculty.id} value={faculty.id}>{faculty.name}</option>)}
+            </select>
+          )}
+          <button type="button" className="button secondary" disabled={loading}
+            onClick={() => { reload(); if (resource === "classes") faculties.reload(); }}>
+            <RefreshCw size={16} /> Tải lại
+          </button>
         </div>
+        {resource === "classes" && faculties.loading && <p className="inline-feedback" role="status">Đang tải danh sách khoa…</p>}
+        {resource === "classes" && !faculties.loading && !faculties.error && !faculties.records.length && (
+          <div className="inline-feedback">
+            <p>Cần có khoa trước khi tạo lớp.</p>
+            <NavLink className="button secondary" to="/admin/catalogs/faculties">Đến danh mục Khoa</NavLink>
+          </div>
+        )}
         {resource === "classes" && faculties.error && (
           <div className="inline-feedback">
             <Feedback error message={faculties.error} />
@@ -174,6 +206,8 @@ function CatalogContent({ resource }) {
         <RecordForm
           title={`${editing.id ? "Chỉnh sửa" : "Thêm"} ${config.singular}`}
           fields={fields}
+          submitDisabled={facultyUnavailable}
+          submitLabel={editing.id ? "Lưu thay đổi" : `Thêm ${config.singular}`}
           initialValues={editing}
           onSave={save}
           onClose={() => setEditing(null)}
