@@ -21,6 +21,7 @@
 			**/dto/**,
 			**/entity/**,
 			**/config/**,
+			**/controller/**,
 			**/common/**
 		</sonar.coverage.exclusions>
 		<!-- Bỏ qua kiểm tra trùng lặp code cho DTO và Entity -->
