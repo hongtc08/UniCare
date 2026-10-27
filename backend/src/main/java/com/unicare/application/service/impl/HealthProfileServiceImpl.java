@@ -9,11 +9,14 @@ import com.unicare.application.service.HealthProfileService;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.ResourceNotFoundException;
 import com.unicare.domain.entity.HealthRecord;
+import com.unicare.domain.entity.Student;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.BloodType;
 import com.unicare.domain.enums.Role;
 import com.unicare.domain.repository.HealthRecordRepository;
+import com.unicare.domain.repository.StudentRepository;
 import com.unicare.domain.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,10 +35,16 @@ public class HealthProfileServiceImpl implements HealthProfileService {
 
     private final HealthRecordRepository healthRecordRepository;
     private final UserRepository userRepository;
+    private final StudentRepository studentRepository;
 
-    public HealthProfileServiceImpl(HealthRecordRepository healthRecordRepository, UserRepository userRepository) {
+    @Autowired
+    public HealthProfileServiceImpl(
+            HealthRecordRepository healthRecordRepository,
+            UserRepository userRepository,
+            StudentRepository studentRepository) {
         this.healthRecordRepository = healthRecordRepository;
         this.userRepository = userRepository;
+        this.studentRepository = studentRepository;
     }
 
     @Override
@@ -53,8 +62,7 @@ public class HealthProfileServiceImpl implements HealthProfileService {
     public HealthProfileResponse upsertHealthProfile(
             String currentUsername,
             Long targetStudentId,
-            HealthProfileRequest request
-    ) {
+            HealthProfileRequest request) {
         if (request == null) {
             throw new BadRequestException("Dữ liệu hồ sơ sức khỏe không được để trống");
         }
@@ -68,13 +76,16 @@ public class HealthProfileServiceImpl implements HealthProfileService {
         double bmiValue = calculateBmi(request.getHeight(), request.getWeight());
         String bmiClassification = classifyBmi(bmiValue);
 
-        HealthRecord record = healthRecordRepository.findByStudentId(targetStudent.getId())
+        Student student = resolveOrCreateStudent(targetStudent);
+
+        HealthRecord record = healthRecordRepository.findByStudentId(student.getId())
                 .orElseGet(() -> {
                     HealthRecord newRecord = new HealthRecord();
-                    newRecord.setStudent(targetStudent);
+                    newRecord.setStudent(student);
                     return newRecord;
                 });
 
+        record.setStudent(student);
         record.setHeight(BigDecimal.valueOf(request.getHeight()).setScale(1, RoundingMode.HALF_UP));
         record.setWeight(BigDecimal.valueOf(request.getWeight()).setScale(1, RoundingMode.HALF_UP));
         record.setBloodType(normalizedBloodType);
@@ -117,6 +128,17 @@ public class HealthProfileServiceImpl implements HealthProfileService {
             return BMI_OVERWEIGHT;
         }
         return BMI_OBESE;
+    }
+
+    private Student resolveOrCreateStudent(User user) {
+        if (studentRepository == null) {
+            return new Student(user.getId(), user, user.getUsername(), null);
+        }
+        return studentRepository.findById(user.getId())
+                .orElseGet(() -> {
+                    Student newStudent = new Student(user.getId(), user, user.getUsername(), null);
+                    return studentRepository.save(newStudent);
+                });
     }
 
     private User resolveAndAuthorizeTargetStudent(String currentUsername, Long targetStudentId) {

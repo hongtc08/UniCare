@@ -9,11 +9,13 @@ import com.unicare.application.service.impl.HealthProfileServiceImpl;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.ResourceNotFoundException;
 import com.unicare.domain.entity.HealthRecord;
+import com.unicare.domain.entity.Student;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.BloodType;
 import com.unicare.domain.enums.Role;
 import com.unicare.domain.enums.UserStatus;
 import com.unicare.domain.repository.HealthRecordRepository;
+import com.unicare.domain.repository.StudentRepository;
 import com.unicare.domain.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +43,9 @@ class HealthProfileServiceImplTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private StudentRepository studentRepository;
+
     @InjectMocks
     private HealthProfileServiceImpl healthProfileService;
 
@@ -48,11 +53,18 @@ class HealthProfileServiceImplTest {
     private User otherStudentUser;
     private User doctorUser;
     private User adminUser;
+    private Student studentEntity;
 
     @BeforeEach
     void setUp() {
         studentUser = new User("24520579", "hashed_pwd", "Tăng Chấn Hồng", Role.SINH_VIEN, UserStatus.ACTIVE);
         studentUser.setId(2L);
+
+        studentEntity = Student.builder()
+                .id(2L)
+                .user(studentUser)
+                .studentCode("24520579")
+                .build();
 
         otherStudentUser = new User("24521234", "hashed_pwd", "Sinh Viên Khác", Role.SINH_VIEN, UserStatus.ACTIVE);
         otherStudentUser.setId(5L);
@@ -62,39 +74,42 @@ class HealthProfileServiceImplTest {
 
         adminUser = new User("admin", "hashed_pwd", "Quản Trị Viên", Role.BAN_QUAN_LY, UserStatus.ACTIVE);
         adminUser.setId(1L);
+
+        lenient().when(studentRepository.findById(2L)).thenReturn(Optional.of(studentEntity));
+        lenient().when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
     @DisplayName("Tính BMI làm tròn 1 chữ số thập phân và phân loại chuẩn WHO (Gầy, Bình thường, Thừa cân, Béo phì)")
     void calculateAndClassifyBmi_AllCategories() {
         // 1. Gầy (< 18.5): 170cm, 50kg -> 50 / (1.7^2) = 17.301... -> 17.3
-        double bmiUnderweight = healthProfileService.calculateBmi(170.0, 50.0);
-        assertThat(bmiUnderweight).isEqualTo(17.3);
-        assertThat(healthProfileService.classifyBmi(bmiUnderweight)).isEqualTo("Gầy");
+        double bmiThin = healthProfileService.calculateBmi(170.0, 50.0);
+        assertThat(bmiThin).isEqualTo(17.3);
+        assertThat(healthProfileService.classifyBmi(bmiThin)).isEqualTo(HealthProfileServiceImpl.BMI_UNDERWEIGHT);
 
         // 2. Bình thường (18.5 - 24.9): 170cm, 65kg -> 65 / 2.89 = 22.491... -> 22.5
         double bmiNormal = healthProfileService.calculateBmi(170.0, 65.0);
         assertThat(bmiNormal).isEqualTo(22.5);
-        assertThat(healthProfileService.classifyBmi(bmiNormal)).isEqualTo("Bình thường");
+        assertThat(healthProfileService.classifyBmi(bmiNormal)).isEqualTo(HealthProfileServiceImpl.BMI_NORMAL);
 
-        // 3. Thừa cân (25.0 - 29.9): 170cm, 78kg -> 78 / 2.89 = 26.989... -> 27.0
-        double bmiOverweight = healthProfileService.calculateBmi(170.0, 78.0);
-        assertThat(bmiOverweight).isEqualTo(27.0);
-        assertThat(healthProfileService.classifyBmi(bmiOverweight)).isEqualTo("Thừa cân");
+        // 3. Thừa cân (25 <= BMI < 30): 165cm, 75kg -> 75 / (1.65^2) = 27.548... -> 27.5
+        double bmiOverweight = healthProfileService.calculateBmi(165.0, 75.0);
+        assertThat(bmiOverweight).isEqualTo(27.5);
+        assertThat(healthProfileService.classifyBmi(bmiOverweight)).isEqualTo(HealthProfileServiceImpl.BMI_OVERWEIGHT);
 
-        // 4. Béo phì (>= 30.0): 165cm, 85kg -> 85 / 2.7225 = 31.221... -> 31.2
-        double bmiObese = healthProfileService.calculateBmi(165.0, 85.0);
-        assertThat(bmiObese).isEqualTo(31.2);
-        assertThat(healthProfileService.classifyBmi(bmiObese)).isEqualTo("Béo phì");
+        // 4. Béo phì (>= 30): 160cm, 85kg -> 85 / (1.6^2) = 33.203... -> 33.2
+        double bmiObese = healthProfileService.calculateBmi(160.0, 85.0);
+        assertThat(bmiObese).isEqualTo(33.2);
+        assertThat(healthProfileService.classifyBmi(bmiObese)).isEqualTo(HealthProfileServiceImpl.BMI_OBESE);
     }
 
     @Test
-    @DisplayName("Sinh viên tự tạo mới hồ sơ sức khỏe thành công và tự động tính BMI")
+    @DisplayName("Sinh viên tự xem và cập nhật thành công hồ sơ sức khỏe của chính mình")
     void upsertHealthProfile_StudentSelfCreate_Success() {
         HealthProfileRequest request = new HealthProfileRequest(
                 170.0,
                 65.0,
-                "o",
+                "O",
                 "Dị ứng hải sản",
                 "Không có",
                 "Đã tiêm 3 mũi COVID-19"
@@ -130,7 +145,7 @@ class HealthProfileServiceImplTest {
     void doctorGetAndUpsertStudentProfile_Success() {
         HealthRecord existing = new HealthRecord();
         existing.setId(10L);
-        existing.setStudent(studentUser);
+        existing.setStudent(studentEntity);
         existing.setHeight(BigDecimal.valueOf(170.0));
         existing.setWeight(BigDecimal.valueOf(60.0));
         existing.setBloodType("AB");
