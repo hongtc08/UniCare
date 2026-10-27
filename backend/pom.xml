@@ -63,6 +63,13 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- Project Lombok -->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+
 		<!-- JJWT (JSON Web Token) cho xác thực không trạng thái -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
