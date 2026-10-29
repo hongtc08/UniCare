@@ -104,7 +104,7 @@ class HealthProfileServiceImplTest {
     }
 
     @Test
-    @DisplayName("Sinh viên tự xem và cập nhật thành công hồ sơ sức khỏe của chính mình")
+    @DisplayName("Sinh viên tự xem và cập nhật thành công hồ sơ sức khỏe của chính mình (tự động khởi tạo Student nếu chưa có)")
     void upsertHealthProfile_StudentSelfCreate_Success() {
         HealthProfileRequest request = new HealthProfileRequest(
                 170.0,
@@ -117,6 +117,7 @@ class HealthProfileServiceImplTest {
         request.setMedicalHistory("Khỏe mạnh");
 
         when(userRepository.findByUsername("24520579")).thenReturn(Optional.of(studentUser));
+        when(studentRepository.findById(2L)).thenReturn(Optional.empty());
         when(healthRecordRepository.findByStudentId(2L)).thenReturn(Optional.empty());
         when(healthRecordRepository.save(any(HealthRecord.class))).thenAnswer(invocation -> {
             HealthRecord saved = invocation.getArgument(0);
@@ -124,7 +125,7 @@ class HealthProfileServiceImplTest {
             return saved;
         });
 
-        HealthProfileResponse response = healthProfileService.upsertHealthProfile("24520579", null, request);
+        HealthProfileResponse response = healthProfileService.upsertHealthProfile("24520579", 2L, request);
 
         assertThat(response).isNotNull();
         assertThat(response.getId()).isEqualTo(10L);
@@ -138,6 +139,7 @@ class HealthProfileServiceImplTest {
         assertThat(response.getUnderlyingDiseases()).isEqualTo("Không có");
         assertThat(response.getVaccinationHistory()).isEqualTo("Đã tiêm 3 mũi COVID-19");
         assertThat(response.getMedicalHistory()).isEqualTo("Khỏe mạnh");
+        verify(studentRepository).save(any(Student.class));
     }
 
     @Test
