@@ -5,6 +5,7 @@ package com.unicare.application.dto.response;
 
 import com.unicare.domain.entity.HealthRecord;
 import com.unicare.domain.entity.User;
+import com.unicare.domain.entity.Student;
 
 import java.time.OffsetDateTime;
 
@@ -35,11 +36,13 @@ public class HealthProfileResponse {
         HealthProfileResponse response = new HealthProfileResponse();
         response.setId(record.getId());
 
-        User student = record.getStudent();
+        Student student = record.getStudent();
         if (student != null) {
             response.setStudentId(student.getId());
-            response.setUsername(student.getUsername());
-            response.setFullName(student.getFullName());
+            if (student.getUser() != null) {
+                response.setUsername(student.getUser().getUsername());
+                response.setFullName(student.getUser().getFullName());
+            }
         }
 
         response.setHeight(record.getHeight() != null ? record.getHeight().doubleValue() : null);
