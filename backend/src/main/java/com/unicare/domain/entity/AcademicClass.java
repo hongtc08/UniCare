@@ -31,5 +31,12 @@ public class AcademicClass {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "faculty_id", nullable = false)
     private Faculty faculty;
+
+    public AcademicClass(String classCode, String className, String academicYear, Faculty faculty) {
+        this.classCode = classCode;
+        this.className = className;
+        this.academicYear = academicYear;
+        this.faculty = faculty;
+    }
 }
 
