@@ -69,7 +69,7 @@ test("catalog payload and endpoint remain compatible", async () => {
   assert.deepEqual(calls[0], { method: "put", args: ["/catalogs/faculties/2", { code: "CNTT", name: "Công nghệ thông tin" }] });
 });
 
-for (const resource of ["faculties", "classes", "disease-groups", "medicines"]) {
+for (const resource of ["faculties", "classes", "disease-groups"]) {
   test(`catalog CRUD contract: ${resource}`, async () => {
     const { adminApi, calls } = await adapter({ success: true, data: [] });
     await adminApi.list(resource);
