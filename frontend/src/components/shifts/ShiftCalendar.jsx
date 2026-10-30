@@ -26,20 +26,22 @@ function ShiftCard({ shift, onShiftClick }) {
   return (
     <div
       onClick={() => onShiftClick && onShiftClick(shift)}
-      className={`relative min-h-[130px] p-3.5 rounded-xl border flex flex-col justify-between transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 select-none ${
+      className={`relative min-h-[135px] p-3 rounded-xl border flex flex-col justify-between transition-all duration-200 cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-0.5 select-none overflow-hidden ${
         isPsychology
           ? "bg-purple-50/70 border-purple-200/90 text-purple-950 hover:border-purple-300"
           : "bg-blue-50/70 border-blue-200/90 text-blue-950 hover:border-blue-300"
       }`}
     >
-      {/* Top: Giờ ca + Badge dịch vụ */}
       <div>
-        <div className="flex items-start justify-between gap-1.5 mb-2">
+        {/* [Dòng 1 + 2]: Giờ khám & Badge loại dịch vụ (flex-wrap tránh overflow) */}
+        <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5 mb-2">
+          {/* Giờ khám */}
           <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 whitespace-nowrap">
             <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>{shift.startTime} - {shift.endTime}</span>
           </div>
 
+          {/* Badge Loại dịch vụ */}
           <span
             className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md shrink-0 border whitespace-nowrap ${
               isPsychology
@@ -56,7 +58,7 @@ function ShiftCard({ shift, onShiftClick }) {
           </span>
         </div>
 
-        {/* Tên Bác sĩ: break-words, whitespace-normal để không bị cắt nửa từ */}
+        {/* [Dòng 3]: Tên Bác sĩ */}
         <div className="flex items-start gap-1.5 mb-1.5">
           <User className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
           <h4 className="text-sm font-semibold text-slate-800 leading-snug whitespace-normal break-words">
@@ -64,16 +66,16 @@ function ShiftCard({ shift, onShiftClick }) {
           </h4>
         </div>
 
-        {/* Phòng khám */}
+        {/* [Dòng 4]: Phòng khám */}
         {shift.room && (
-          <div className="flex items-start gap-1.5 text-[13px] text-slate-500 mb-3 whitespace-normal break-words">
+          <div className="flex items-start gap-1.5 text-[13px] text-slate-500 mb-2.5 whitespace-normal break-words">
             <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
             <span className="leading-snug">{shift.room}</span>
           </div>
         )}
       </div>
 
-      {/* Bottom: Text Slot và Progress Bar */}
+      {/* [Dòng 5]: Trạng thái Slot & Thanh Tiến độ lấp đầy (Progress bar) */}
       <div className="pt-2 border-t border-slate-200/60 mt-auto">
         <div className="flex items-center justify-between text-xs font-medium text-slate-600 mb-1.5">
           <div className="flex items-center gap-1.5 whitespace-nowrap">

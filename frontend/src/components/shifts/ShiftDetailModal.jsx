@@ -9,23 +9,23 @@ import {
   Users, 
   AlertTriangle, 
   Trash2, 
-  Edit3,
-  CheckCircle2
+  Edit3
 } from "lucide-react";
 import { CLINIC_ROOMS, SHIFT_SLOTS, SERVICE_CONFIG } from "./mockShiftData";
 
+function formatDateDMY(dateString) {
+  if (!dateString) return "";
+  const parts = dateString.split("-");
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateString;
+}
+
 /**
  * Modal Thêm/Sửa/Xem Chi tiết Ca khám:
- * 1. BỎ input chọn giờ tự do -> Dropdown Select "Ca trực":
- *    - "Ca Sáng (08:00 - 11:00)"
- *    - "Ca Chiều (13:00 - 17:00)"
- * 2. Phòng khám: Dropdown Select đúng 2 phòng (P.101 & P.102).
- *    Tự động gợi ý phòng theo Dịch vụ (Đa khoa -> P.101, Tâm lý -> P.102).
- * 3. Validation & Conflict Rules:
- *    - Chặn trùng lịch Bác sĩ (cùng ngày & cùng ca).
- *    - Chặn trùng Phòng khám (cùng ngày & cùng ca).
- *    - Rule Sửa: maxCapacity >= bookedCount.
- *    - Rule Xóa: bookedCount > 0 thì cảnh báo & chặn xóa.
+ * - ADMIN: Dropdown "Bác sĩ phụ trách" hoạt động bình thường, cho phép chọn bất kỳ bác sĩ nào.
+ * - DOCTOR: Field "Bác sĩ phụ trách" bị disabled/readOnly, tự động gán giá trị của chính bác sĩ đang đăng nhập.
  */
 export default function ShiftDetailModal({
   isOpen,
@@ -40,14 +40,20 @@ export default function ShiftDetailModal({
   selectedDayForCreate,
   selectedSlotForCreate = "MORNING",
   userRole = "ADMIN",
+  currentUserId = "doc-1",
+  currentUserName = "Bác sĩ",
 }) {
   const isAdmin = userRole === "ADMIN" || userRole === "BAN_QUAN_LY";
+  const isDoctor = !isAdmin;
+
+  // Xác định Bác sĩ ban đầu: nếu là DOCTOR thì cố định là currentUserId
+  const initialDoctorId = isDoctor ? currentUserId : doctors[0]?.id || currentUserId;
 
   // Form State
   const [formData, setFormData] = useState({
     date: selectedDayForCreate || new Date().toISOString().split("T")[0],
     shiftSlot: selectedSlotForCreate || "MORNING",
-    doctorId: doctors[0]?.id || "",
+    doctorId: initialDoctorId,
     serviceType: "KHAM_DA_KHOA",
     room: "P.101 - Phòng y tế",
     maxCapacity: 10,
@@ -69,7 +75,7 @@ export default function ShiftDetailModal({
       setFormData({
         date: selectedDayForCreate || new Date().toISOString().split("T")[0],
         shiftSlot: selectedSlotForCreate || "MORNING",
-        doctorId: doctors[0]?.id || "",
+        doctorId: isDoctor ? currentUserId : doctors[0]?.id || currentUserId,
         serviceType: defaultService,
         room: SERVICE_CONFIG[defaultService].defaultRoom,
         maxCapacity: 10,
@@ -79,17 +85,17 @@ export default function ShiftDetailModal({
       setFormData({
         date: shift.date,
         shiftSlot: shift.shiftSlot || (parseInt(shift.startTime?.split(":")[0], 10) < 12 ? "MORNING" : "AFTERNOON"),
-        doctorId: shift.doctorId,
+        doctorId: isDoctor ? currentUserId : shift.doctorId,
         serviceType: shift.serviceType,
         room: shift.room || "P.101 - Phòng y tế",
         maxCapacity: shift.maxCapacity,
       });
     }
-  }, [isOpen, mode, shift, selectedDayForCreate, selectedSlotForCreate, doctors]);
+  }, [isOpen, mode, shift, selectedDayForCreate, selectedSlotForCreate, doctors, isDoctor, currentUserId]);
 
   if (!isOpen) return null;
 
-  // Tự động gợi ý phòng theo Dịch vụ khi người dùng thay đổi loại dịch vụ
+  // Tự động gợi ý phòng theo Dịch vụ
   const handleServiceTypeChange = (newService) => {
     const recommendedRoom = SERVICE_CONFIG[newService]?.defaultRoom || CLINIC_ROOMS[0];
     setFormData((prev) => ({
@@ -122,7 +128,8 @@ export default function ShiftDetailModal({
     );
     if (doctorConflict) {
       const doc = doctors.find((d) => d.id === dataToValidate.doctorId);
-      return `Bác sĩ ${doc?.name || ""} đã có ca trực trong ${targetSlot.label} ngày ${dataToValidate.date}! Không thể xếp thêm ca.`;
+      const doctorDisplayName = doc ? doc.name : (isDoctor ? currentUserName : "này");
+      return `Bác sĩ ${doctorDisplayName} đã có ca trực trong ${targetSlot.label} ngày ${formatDateDMY(dataToValidate.date)}! Không thể xếp thêm ca.`;
     }
 
     // Rule 2: Chặn trùng Phòng khám
@@ -130,7 +137,7 @@ export default function ShiftDetailModal({
       (s) => s.room === dataToValidate.room
     );
     if (roomConflict) {
-      return `${dataToValidate.room} đã được phân cho ca khác trong ${targetSlot.label} ngày ${dataToValidate.date}! Vui lòng chọn phòng khám còn lại.`;
+      return `${dataToValidate.room} đã được phân cho ca khác trong ${targetSlot.label} ngày ${formatDateDMY(dataToValidate.date)}! Vui lòng chọn phòng khám còn lại.`;
     }
 
     // Rule 3: Khi sửa, số lượng tối đa không được nhỏ hơn số slot đã đặt
@@ -160,13 +167,14 @@ export default function ShiftDetailModal({
     }
 
     const doc = doctors.find((d) => d.id === formData.doctorId);
+    const resolvedDoctorName = isDoctor ? currentUserName : (doc ? doc.name : "Bác sĩ");
     const slotInfo = SHIFT_SLOTS[formData.shiftSlot];
 
     const payload = {
       ...formData,
       startTime: slotInfo.startTime,
       endTime: slotInfo.endTime,
-      doctorName: doc ? doc.name : "Bác sĩ",
+      doctorName: resolvedDoctorName,
     };
 
     if (mode === "CREATE" || !shift) {
@@ -233,7 +241,7 @@ export default function ShiftDetailModal({
           </button>
         </div>
 
-        {/* Thông báo lỗi validation nếu có */}
+        {/* Thông báo lỗi validation */}
         {errorMessage && (
           <div className="mx-6 mt-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700 animate-in fade-in">
             <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
@@ -262,7 +270,7 @@ export default function ShiftDetailModal({
                 <Calendar className="w-4 h-4 text-slate-400 mt-0.5" />
                 <div>
                   <div className="text-xs text-slate-400">Ngày khám</div>
-                  <div className="font-semibold text-slate-800">{shift.date}</div>
+                  <div className="font-semibold text-slate-800">{formatDateDMY(shift.date)}</div>
                 </div>
               </div>
 
@@ -297,7 +305,7 @@ export default function ShiftDetailModal({
               <div className="flex justify-between items-center mb-1.5 text-xs">
                 <span className="font-medium text-slate-600">Lượng bệnh nhân đã đặt:</span>
                 <span className="font-bold text-slate-900">
-                  {shift.bookedCount} / {shift.maxCapacity} chỗ ({Math.round((shift.bookedCount / shift.maxCapacity) * 100)}%)
+                  {shift.bookedCount} / {shift.maxCapacity} ({Math.round((shift.bookedCount / shift.maxCapacity) * 100)}%)
                 </span>
               </div>
               <div className="w-full bg-slate-200 rounded-full h-2">
@@ -346,7 +354,7 @@ export default function ShiftDetailModal({
           /* 2. FORM THÊM / SỬA CA KHÁM */
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             
-            {/* Hàng 1: Ngày làm việc & Dropdown Ca trực */}
+            {/* Ngày làm việc & Ca trực */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -364,7 +372,6 @@ export default function ShiftDetailModal({
                 />
               </div>
 
-              {/* DROPDOWN SELECT CA TRỰC (Thay thế hoàn toàn 2 input giờ tự do) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Ca trực <span className="text-red-500">*</span>
@@ -383,7 +390,7 @@ export default function ShiftDetailModal({
               </div>
             </div>
 
-            {/* Hàng 2: Loại dịch vụ & Phòng khám */}
+            {/* Dịch vụ & Phòng khám */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -399,7 +406,6 @@ export default function ShiftDetailModal({
                 </select>
               </div>
 
-              {/* DROPDOWN SELECT PHÒNG KHÁM (Chỉ đúng 2 phòng P.101 & P.102) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Phòng khám <span className="text-red-500">*</span>
@@ -421,28 +427,40 @@ export default function ShiftDetailModal({
               </div>
             </div>
 
-            {/* Hàng 3: Bác sĩ phụ trách */}
+            {/* Bác sĩ phụ trách: ADMIN được chọn mọi BS, DOCTOR bị disabled và tự động gán tên BS đang đăng nhập */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Bác sĩ phụ trách <span className="text-red-500">*</span>
               </label>
-              <select
-                value={formData.doctorId}
-                onChange={(e) => {
-                  setFormData({ ...formData, doctorId: e.target.value });
-                  setErrorMessage("");
-                }}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white"
-              >
-                {doctors.map((doc) => (
-                  <option key={doc.id} value={doc.id}>
-                    {doc.name} - {doc.specialty === "KHAM_DA_KHOA" ? "Khoa Đa Khoa" : "Tâm Lý"}
-                  </option>
-                ))}
-              </select>
+              {isDoctor ? (
+                /* Giao diện dành riêng cho Bác sĩ (disabled/readOnly) */
+                <input
+                  type="text"
+                  readOnly
+                  disabled
+                  value={`${currentUserName} (Tài khoản của bạn)`}
+                  className="w-full px-3 py-2 text-sm bg-slate-100 text-slate-700 border border-slate-200 rounded-lg font-medium cursor-not-allowed select-none"
+                />
+              ) : (
+                /* Giao diện dành cho Admin: Chọn bất kỳ bác sĩ nào */
+                <select
+                  value={formData.doctorId}
+                  onChange={(e) => {
+                    setFormData({ ...formData, doctorId: e.target.value });
+                    setErrorMessage("");
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white"
+                >
+                  {doctors.map((doc) => (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.name} - {doc.specialty === "KHAM_DA_KHOA" ? "Khoa Đa Khoa" : "Tâm Lý"}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
-            {/* Hàng 4: Số lượng tối đa */}
+            {/* Số lượng tối đa */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-semibold text-slate-700">

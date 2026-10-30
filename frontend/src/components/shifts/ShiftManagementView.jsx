@@ -21,14 +21,18 @@ function formatDateToISO(date) {
 
 /**
  * ShiftManagementView - Quản lý Lịch trực & Mở Ca khám tuần
+ * Tích hợp Authentication State thực tế:
+ * - Admin: xem tất cả ca, bộ lọc Bác sĩ đầy đủ, phân công mọi bác sĩ.
+ * - Doctor: chỉ xem lịch của chính mình, ẩn bộ lọc Bác sĩ, Modal cố định bác sĩ đang đăng nhập.
  */
 export default function ShiftManagementView({
   userRole = "ADMIN",
   currentUserId = "doc-1",
+  currentUserName = "Bác sĩ",
   onShiftSelect,
 }) {
   const isAdmin = userRole === "ADMIN" || userRole === "BAN_QUAN_LY";
-  const isDoctor = userRole === "DOCTOR" || userRole === "NHAN_VIEN_Y_TE";
+  const isDoctor = !isAdmin;
 
   // Bộ lọc
   const [selectedDate, setSelectedDate] = useState(() => formatDateToISO(new Date()));
@@ -49,11 +53,13 @@ export default function ShiftManagementView({
   });
 
   const currentDoctor = useMemo(() => {
-    return MOCK_DOCTORS.find((d) => d.id === currentUserId) || {
-      id: currentUserId,
-      name: "Bác sĩ cá nhân",
-    };
-  }, [currentUserId]);
+    return (
+      MOCK_DOCTORS.find((d) => d.id === currentUserId) || {
+        id: currentUserId,
+        name: currentUserName || "Bác sĩ cá nhân",
+      }
+    );
+  }, [currentUserId, currentUserName]);
 
   // Tính 7 ngày trong tuần
   const weekDays = useMemo(() => {
@@ -84,12 +90,12 @@ export default function ShiftManagementView({
   // Phân quyền & Lọc đa tiêu chí
   const filteredShifts = useMemo(() => {
     return shifts.filter((shift) => {
-      // 1. Phân quyền: Bác sĩ chỉ xem lịch của mình
-      if (isDoctor && !isAdmin) {
+      // 1. Phân quyền: DOCTOR chỉ thấy lịch của chính mình (doctorId === currentUserId)
+      if (isDoctor) {
         if (shift.doctorId !== currentUserId) return false;
       }
 
-      // 2. Lọc theo Bác sĩ (Admin)
+      // 2. Lọc theo Bác sĩ (chỉ áp dụng khi ADMIN chọn lọc)
       if (isAdmin && selectedDoctor !== "ALL") {
         if (shift.doctorId !== selectedDoctor) return false;
       }
@@ -99,7 +105,7 @@ export default function ShiftManagementView({
         if (shift.serviceType !== selectedService) return false;
       }
 
-      // 4. Lọc theo Phòng khám (Đúng 2 phòng P.101 & P.102)
+      // 4. Lọc theo Phòng khám
       if (selectedRoom !== "ALL") {
         if (shift.room !== selectedRoom) return false;
       }
@@ -182,7 +188,7 @@ export default function ShiftManagementView({
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4">
-      {/* 1. Header: Tiêu đề chính + Action Button (Không text phụ) */}
+      {/* 1. Header: Tiêu đề chính + Action Button */}
       <div className="flex items-center justify-between gap-4 mb-5">
         <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
           Quản lý Lịch trực & Mở Ca khám tuần
@@ -200,7 +206,7 @@ export default function ShiftManagementView({
         )}
       </div>
 
-      {/* 2. Bộ lọc ShiftFilters (Có thêm lọc Phòng khám) */}
+      {/* 2. Bộ lọc ShiftFilters (Admin: đầy đủ BS; Doctor: ẩn dropdown BS) */}
       <ShiftFilters
         selectedDate={selectedDate}
         onDateChange={setSelectedDate}
@@ -220,7 +226,7 @@ export default function ShiftManagementView({
         weekRangeLabel={weekRangeLabel}
       />
 
-      {/* 3. Lịch Time-Grid View (Xếp dọc đa ca trong 1 ô) */}
+      {/* 3. Lịch Time-Grid View */}
       <ShiftCalendar
         weekDays={weekDays}
         shifts={filteredShifts}
@@ -229,7 +235,7 @@ export default function ShiftManagementView({
         isAdmin={isAdmin}
       />
 
-      {/* 4. Modal Thêm / Sửa / Xem chi tiết với validation xung đột */}
+      {/* 4. Modal Thêm / Sửa / Xem chi tiết */}
       <ShiftDetailModal
         isOpen={modalState.isOpen}
         onClose={() => setModalState({ ...modalState, isOpen: false })}
@@ -243,6 +249,8 @@ export default function ShiftManagementView({
         selectedDayForCreate={modalState.selectedDayForCreate}
         selectedSlotForCreate={modalState.selectedSlotForCreate}
         userRole={userRole}
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
       />
     </div>
   );
