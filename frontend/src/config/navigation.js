@@ -5,7 +5,6 @@ export const navigation = {
     { to: "/dashboard", label: "Bảng điều khiển", icon: LayoutDashboard },
     { to: "/profile", label: "Hồ sơ sức khỏe", icon: Heart },
     { to: "/mental-health", label: "Sức khỏe tinh thần", icon: Activity },
-    { to: "/lich-kham", label: "Lịch khám", icon: Calendar },
     { to: "/health-knowledge", label: "Kiến thức sức khỏe", icon: BookOpen },
   ],
   NHAN_VIEN_Y_TE: [

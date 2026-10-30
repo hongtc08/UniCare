@@ -51,14 +51,14 @@ export default function App() {
                 <Route path="/medical-records" element={<UpcomingFeature />} />
                 <Route path="/emergency" element={<UpcomingFeature />} />
               </Route>
+              {/* Phân hệ Quản lý Lịch trực & Mở ca khám: Chỉ dành cho Bác sĩ/Nhân viên y tế và Quản lý */}
               <Route
                 element={
                   <ProtectedRoute
-                    allowedRoles={["SINH_VIEN", "NHAN_VIEN_Y_TE", "BAN_QUAN_LY"]}
+                    allowedRoles={["NHAN_VIEN_Y_TE", "BAN_QUAN_LY"]}
                   />
                 }
               >
-                <Route path="/lich-kham" element={<ShiftManagement />} />
                 <Route path="/shifts" element={<ShiftManagement />} />
               </Route>
               <Route element={<ProtectedRoute allowedRoles={["SINH_VIEN"]} />}>

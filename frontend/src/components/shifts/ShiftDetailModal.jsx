@@ -9,7 +9,8 @@ import {
   Users, 
   AlertTriangle, 
   Trash2, 
-  Edit3
+  Edit3,
+  Loader2
 } from "lucide-react";
 import { CLINIC_ROOMS, SHIFT_SLOTS, SERVICE_CONFIG } from "./mockShiftData";
 
@@ -23,9 +24,7 @@ function formatDateDMY(dateString) {
 }
 
 /**
- * Modal Thêm/Sửa/Xem Chi tiết Ca khám:
- * - ADMIN: Dropdown "Bác sĩ phụ trách" hoạt động bình thường, cho phép chọn bất kỳ bác sĩ nào.
- * - DOCTOR: Field "Bác sĩ phụ trách" bị disabled/readOnly, tự động gán giá trị của chính bác sĩ đang đăng nhập.
+ * Modal Thêm / Sửa / Chi tiết Ca khám tích hợp gọi API
  */
 export default function ShiftDetailModal({
   isOpen,
@@ -33,21 +32,19 @@ export default function ShiftDetailModal({
   shift,
   mode = "DETAIL", // 'DETAIL' | 'CREATE' | 'EDIT'
   doctors = [],
-  shifts = [],
   onCreateShift,
   onUpdateShift,
   onDeleteShift,
   selectedDayForCreate,
   selectedSlotForCreate = "MORNING",
   userRole = "ADMIN",
-  currentUserId = "doc-1",
+  currentUserId,
   currentUserName = "Bác sĩ",
 }) {
   const isAdmin = userRole === "ADMIN" || userRole === "BAN_QUAN_LY";
   const isDoctor = !isAdmin;
 
-  // Xác định Bác sĩ ban đầu: nếu là DOCTOR thì cố định là currentUserId
-  const initialDoctorId = isDoctor ? currentUserId : doctors[0]?.id || currentUserId;
+  const initialDoctorId = isDoctor ? currentUserId : doctors[0]?.id || currentUserId || "";
 
   // Form State
   const [formData, setFormData] = useState({
@@ -59,13 +56,17 @@ export default function ShiftDetailModal({
     maxCapacity: 10,
   });
 
-  const [errorMessage, setErrorMessage] = useState("");
+  const [formError, setFormError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(mode === "CREATE" || mode === "EDIT");
 
-  // Đồng bộ form khi mở modal hoặc đổi shift
+  // Đồng bộ form khi mở modal hoặc thay đổi ca khám
   useEffect(() => {
     if (!isOpen) {
-      setErrorMessage("");
+      setFormError("");
+      setIsSubmitting(false);
+      setIsDeleting(false);
       return;
     }
 
@@ -75,7 +76,7 @@ export default function ShiftDetailModal({
       setFormData({
         date: selectedDayForCreate || new Date().toISOString().split("T")[0],
         shiftSlot: selectedSlotForCreate || "MORNING",
-        doctorId: isDoctor ? currentUserId : doctors[0]?.id || currentUserId,
+        doctorId: isDoctor ? currentUserId : doctors[0]?.id || currentUserId || "",
         serviceType: defaultService,
         room: SERVICE_CONFIG[defaultService].defaultRoom,
         maxCapacity: 10,
@@ -84,7 +85,9 @@ export default function ShiftDetailModal({
       setIsEditing(mode === "EDIT");
       setFormData({
         date: shift.date,
-        shiftSlot: shift.shiftSlot || (parseInt(shift.startTime?.split(":")[0], 10) < 12 ? "MORNING" : "AFTERNOON"),
+        shiftSlot:
+          shift.shiftSlot ||
+          (parseInt(shift.startTime?.split(":")[0], 10) < 12 ? "MORNING" : "AFTERNOON"),
         doctorId: isDoctor ? currentUserId : shift.doctorId,
         serviceType: shift.serviceType,
         room: shift.room || "P.101 - Phòng y tế",
@@ -95,7 +98,6 @@ export default function ShiftDetailModal({
 
   if (!isOpen) return null;
 
-  // Tự động gợi ý phòng theo Dịch vụ
   const handleServiceTypeChange = (newService) => {
     const recommendedRoom = SERVICE_CONFIG[newService]?.defaultRoom || CLINIC_ROOMS[0];
     setFormData((prev) => ({
@@ -103,114 +105,94 @@ export default function ShiftDetailModal({
       serviceType: newService,
       room: recommendedRoom,
     }));
-    setErrorMessage("");
-  };
-
-  /**
-   * Kiểm tra xung đột & Validation Rules
-   */
-  const validateShift = (dataToValidate, currentShiftId = null) => {
-    const targetSlot = SHIFT_SLOTS[dataToValidate.shiftSlot];
-
-    // Lọc danh sách các ca khác trong cùng Ngày và cùng Ca trực
-    const otherShiftsInSlot = shifts.filter(
-      (s) =>
-        s.id !== currentShiftId &&
-        s.date === dataToValidate.date &&
-        (s.shiftSlot === dataToValidate.shiftSlot ||
-          (dataToValidate.shiftSlot === "MORNING" && parseInt(s.startTime?.split(":")[0], 10) < 12) ||
-          (dataToValidate.shiftSlot === "AFTERNOON" && parseInt(s.startTime?.split(":")[0], 10) >= 12))
-    );
-
-    // Rule 1: Chặn trùng Bác sĩ
-    const doctorConflict = otherShiftsInSlot.find(
-      (s) => s.doctorId === dataToValidate.doctorId
-    );
-    if (doctorConflict) {
-      const doc = doctors.find((d) => d.id === dataToValidate.doctorId);
-      const doctorDisplayName = doc ? doc.name : (isDoctor ? currentUserName : "này");
-      return `Bác sĩ ${doctorDisplayName} đã có ca trực trong ${targetSlot.label} ngày ${formatDateDMY(dataToValidate.date)}! Không thể xếp thêm ca.`;
-    }
-
-    // Rule 2: Chặn trùng Phòng khám
-    const roomConflict = otherShiftsInSlot.find(
-      (s) => s.room === dataToValidate.room
-    );
-    if (roomConflict) {
-      return `${dataToValidate.room} đã được phân cho ca khác trong ${targetSlot.label} ngày ${formatDateDMY(dataToValidate.date)}! Vui lòng chọn phòng khám còn lại.`;
-    }
-
-    // Rule 3: Khi sửa, số lượng tối đa không được nhỏ hơn số slot đã đặt
-    if (currentShiftId && shift) {
-      if (dataToValidate.maxCapacity < shift.bookedCount) {
-        return `Số lượng tối đa (${dataToValidate.maxCapacity}) không thể nhỏ hơn số người đã đặt (${shift.bookedCount})!`;
-      }
-    }
-
-    if (dataToValidate.maxCapacity <= 0) {
-      return "Số lượng chỗ tối đa phải lớn hơn 0!";
-    }
-
-    return null;
+    setFormError("");
   };
 
   // Submit Handler
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrorMessage("");
+    setFormError("");
 
-    const currentShiftId = shift?.id || null;
-    const validationError = validateShift(formData, currentShiftId);
-    if (validationError) {
-      setErrorMessage(validationError);
+    // Validate nhanh ở FE
+    if (formData.maxCapacity <= 0) {
+      setFormError("Số lượng tối đa phải lớn hơn 0");
+      return;
+    }
+    if (shift && formData.maxCapacity < shift.bookedCount) {
+      setFormError(`Không thể giảm số lượng tối đa (${formData.maxCapacity}) thấp hơn số đã đặt (${shift.bookedCount})`);
       return;
     }
 
-    const doc = doctors.find((d) => d.id === formData.doctorId);
-    const resolvedDoctorName = isDoctor ? currentUserName : (doc ? doc.name : "Bác sĩ");
     const slotInfo = SHIFT_SLOTS[formData.shiftSlot];
+    const doc = doctors.find((d) => String(d.id) === String(formData.doctorId));
+    const resolvedDoctorName = isDoctor ? currentUserName : (doc ? doc.name : "Bác sĩ");
 
+    // Chuẩn hóa Payload gửi lên BE
     const payload = {
-      ...formData,
+      doctorId: formData.doctorId ? Number(formData.doctorId) || formData.doctorId : undefined,
+      shiftDate: formData.date,
       startTime: slotInfo.startTime,
       endTime: slotInfo.endTime,
+      serviceType: formData.serviceType,
+      room: formData.room,
+      maxQuantity: Number(formData.maxCapacity),
+      // Giữ thêm fields cho UI FE map mượt mà
       doctorName: resolvedDoctorName,
+      shiftSlot: formData.shiftSlot,
     };
 
-    if (mode === "CREATE" || !shift) {
-      onCreateShift({
-        ...payload,
-        id: `shift-${Date.now()}`,
-        bookedCount: 0,
-      });
-    } else {
-      onUpdateShift({
-        ...shift,
-        ...payload,
-      });
+    try {
+      setIsSubmitting(true);
+      if (mode === "CREATE" || !shift) {
+        await onCreateShift(payload);
+      } else {
+        await onUpdateShift(shift.id, payload);
+      }
+      onClose();
+    } catch (err) {
+      const beMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Thao tác thất bại. Vui lòng kiểm tra lại.";
+      setFormError(beMsg);
+    } finally {
+      setIsSubmitting(false);
     }
-    onClose();
   };
 
   // Delete Handler
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!shift) return;
     if (shift.bookedCount > 0) {
-      setErrorMessage(
-        `Không thể xóa ca trực này vì đã có ${shift.bookedCount} sinh viên/bệnh nhân đặt chỗ! Hãy hủy lịch hẹn của bệnh nhân trước.`
+      setFormError(
+        `Ca khám đã có ${shift.bookedCount} lịch hẹn. Vui lòng hủy hoặc dời lịch hẹn trước khi xóa.`
       );
       return;
     }
 
-    if (window.confirm("Bạn có chắc chắn muốn xóa ca trực này khỏi lịch?")) {
-      onDeleteShift(shift.id);
-      onClose();
+    if (window.confirm("Bạn có chắc chắn muốn xóa ca trực này khỏi hệ thống?")) {
+      try {
+        setIsDeleting(true);
+        await onDeleteShift(shift.id);
+        onClose();
+      } catch (err) {
+        const beMsg =
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message ||
+          "Không thể xóa ca trực.";
+        setFormError(beMsg);
+      } finally {
+        setIsDeleting(false);
+      }
     }
   };
 
   const isFull = shift ? shift.bookedCount >= shift.maxCapacity : false;
   const slotDetails = shift
-    ? SHIFT_SLOTS[shift.shiftSlot] || (parseInt(shift.startTime?.split(":")[0], 10) < 12 ? SHIFT_SLOTS.MORNING : SHIFT_SLOTS.AFTERNOON)
+    ? SHIFT_SLOTS[shift.shiftSlot] ||
+      (parseInt(shift.startTime?.split(":")[0], 10) < 12 ? SHIFT_SLOTS.MORNING : SHIFT_SLOTS.AFTERNOON)
     : SHIFT_SLOTS[formData.shiftSlot];
 
   return (
@@ -235,21 +217,22 @@ export default function ShiftDetailModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-full transition-colors"
+            disabled={isSubmitting || isDeleting}
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-full transition-colors disabled:opacity-50"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Thông báo lỗi validation */}
-        {errorMessage && (
+        {/* Thông báo lỗi validation hoặc lỗi BE trả về */}
+        {formError && (
           <div className="mx-6 mt-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2.5 text-xs text-red-700 animate-in fade-in">
             <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-            <span className="font-medium">{errorMessage}</span>
+            <span className="font-medium leading-relaxed">{formError}</span>
           </div>
         )}
 
-        {/* 1. VIEW CHI TIẾT (DETAIL) */}
+        {/* VIEW CHI TIẾT (DETAIL) */}
         {!isEditing && shift ? (
           <div className="p-6 space-y-4">
             <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
@@ -316,30 +299,29 @@ export default function ShiftDetailModal({
               </div>
             </div>
 
-            {/* Actions cho Admin */}
+            {/* Actions cho Admin / Bác sĩ */}
             <div className="flex items-center justify-between pt-3 border-t border-slate-100">
               {isAdmin && (
                 <button
                   type="button"
                   onClick={handleDelete}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                  disabled={isDeleting}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   <span>Xóa ca</span>
                 </button>
               )}
 
               <div className="flex items-center gap-2 ml-auto">
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setIsEditing(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    <span>Chỉnh sửa</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>Chỉnh sửa</span>
+                </button>
                 <button
                   type="button"
                   onClick={onClose}
@@ -351,7 +333,7 @@ export default function ShiftDetailModal({
             </div>
           </div>
         ) : (
-          /* 2. FORM THÊM / SỬA CA KHÁM */
+          /* FORM THÊM / SỬA CA KHÁM */
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             
             {/* Ngày làm việc & Ca trực */}
@@ -363,12 +345,13 @@ export default function ShiftDetailModal({
                 <input
                   type="date"
                   required
+                  disabled={isSubmitting}
                   value={formData.date}
                   onChange={(e) => {
                     setFormData({ ...formData, date: e.target.value });
-                    setErrorMessage("");
+                    setFormError("");
                   }}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50"
                 />
               </div>
 
@@ -378,11 +361,12 @@ export default function ShiftDetailModal({
                 </label>
                 <select
                   value={formData.shiftSlot}
+                  disabled={isSubmitting}
                   onChange={(e) => {
                     setFormData({ ...formData, shiftSlot: e.target.value });
-                    setErrorMessage("");
+                    setFormError("");
                   }}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white disabled:bg-slate-50"
                 >
                   <option value="MORNING">Ca Sáng (08:00 - 11:00)</option>
                   <option value="AFTERNOON">Ca Chiều (13:00 - 17:00)</option>
@@ -398,8 +382,9 @@ export default function ShiftDetailModal({
                 </label>
                 <select
                   value={formData.serviceType}
+                  disabled={isSubmitting}
                   onChange={(e) => handleServiceTypeChange(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white disabled:bg-slate-50"
                 >
                   <option value="KHAM_DA_KHOA">Khám Đa khoa</option>
                   <option value="TU_VAN_TAM_LY">Tư vấn Tâm lý</option>
@@ -412,11 +397,12 @@ export default function ShiftDetailModal({
                 </label>
                 <select
                   value={formData.room}
+                  disabled={isSubmitting}
                   onChange={(e) => {
                     setFormData({ ...formData, room: e.target.value });
-                    setErrorMessage("");
+                    setFormError("");
                   }}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white disabled:bg-slate-50"
                 >
                   {CLINIC_ROOMS.map((room) => (
                     <option key={room} value={room}>
@@ -427,13 +413,12 @@ export default function ShiftDetailModal({
               </div>
             </div>
 
-            {/* Bác sĩ phụ trách: ADMIN được chọn mọi BS, DOCTOR bị disabled và tự động gán tên BS đang đăng nhập */}
+            {/* Bác sĩ phụ trách */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Bác sĩ phụ trách <span className="text-red-500">*</span>
               </label>
               {isDoctor ? (
-                /* Giao diện dành riêng cho Bác sĩ (disabled/readOnly) */
                 <input
                   type="text"
                   readOnly
@@ -442,14 +427,14 @@ export default function ShiftDetailModal({
                   className="w-full px-3 py-2 text-sm bg-slate-100 text-slate-700 border border-slate-200 rounded-lg font-medium cursor-not-allowed select-none"
                 />
               ) : (
-                /* Giao diện dành cho Admin: Chọn bất kỳ bác sĩ nào */
                 <select
                   value={formData.doctorId}
+                  disabled={isSubmitting}
                   onChange={(e) => {
                     setFormData({ ...formData, doctorId: e.target.value });
-                    setErrorMessage("");
+                    setFormError("");
                   }}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white disabled:bg-slate-50"
                 >
                   {doctors.map((doc) => (
                     <option key={doc.id} value={doc.id}>
@@ -476,39 +461,43 @@ export default function ShiftDetailModal({
                 type="number"
                 min={shift ? shift.bookedCount || 1 : 1}
                 max="50"
+                disabled={isSubmitting}
                 value={formData.maxCapacity}
                 onChange={(e) => {
                   setFormData({
                     ...formData,
                     maxCapacity: parseInt(e.target.value, 10) || 1,
                   });
-                  setErrorMessage("");
+                  setFormError("");
                 }}
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50"
               />
             </div>
 
-            {/* Modal Actions */}
+            {/* Actions */}
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => {
                   if (mode === "DETAIL" && shift) {
                     setIsEditing(false);
-                    setErrorMessage("");
+                    setFormError("");
                   } else {
                     onClose();
                   }
                 }}
-                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
               >
                 {mode === "DETAIL" && shift ? "Quay lại" : "Hủy"}
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors"
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors disabled:opacity-50"
               >
-                {mode === "CREATE" || !shift ? "Mở Ca Khám" : "Lưu Thay Đổi"}
+                {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{mode === "CREATE" || !shift ? "Mở Ca Khám" : "Lưu Thay Đổi"}</span>
               </button>
             </div>
           </form>
