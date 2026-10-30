@@ -1,6 +1,5 @@
 package com.unicare.application.dto.request;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -11,21 +10,17 @@ public class AcademicClassRequest {
 
     @NotBlank(message = "Mã lớp không được để trống")
     @Size(max = 10, message = "Mã lớp không được vượt quá 10 ký tự")
-    @JsonAlias({"code", "class_code"})
     private String classCode;
 
     @NotBlank(message = "Tên lớp không được để trống")
     @Size(max = 50, message = "Tên lớp không được vượt quá 50 ký tự")
-    @JsonAlias({"name", "class_name"})
     private String className;
 
     @NotBlank(message = "Khóa học không được để trống")
     @Size(max = 10, message = "Khóa học không được vượt quá 10 ký tự")
-    @JsonAlias({"academic_year", "cohort"})
     private String academicYear;
 
     @NotNull(message = "Khoa trực thuộc không được để trống")
-    @JsonAlias({"faculty_id", "facultyId"})
     private Integer facultyId;
 
     public AcademicClassRequest() {
@@ -70,4 +65,3 @@ public class AcademicClassRequest {
         this.facultyId = facultyId;
     }
 }
-
