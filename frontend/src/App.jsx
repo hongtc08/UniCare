@@ -11,6 +11,7 @@ import MedicalList from "./pages/MedicalList";
 import Unauthorized from "./pages/Unauthorized";
 import Accounts from "./pages/admin/Accounts";
 import Catalogs from "./pages/admin/Catalogs";
+import ShiftManagement from "./pages/ShiftManagement";
 
 function HomeRedirect() {
   const { user } = useAuth();
@@ -53,11 +54,12 @@ export default function App() {
               <Route
                 element={
                   <ProtectedRoute
-                    allowedRoles={["SINH_VIEN", "NHAN_VIEN_Y_TE"]}
+                    allowedRoles={["SINH_VIEN", "NHAN_VIEN_Y_TE", "BAN_QUAN_LY"]}
                   />
                 }
               >
-                <Route path="/lich-kham" element={<UpcomingFeature />} />
+                <Route path="/lich-kham" element={<ShiftManagement />} />
+                <Route path="/shifts" element={<ShiftManagement />} />
               </Route>
               <Route element={<ProtectedRoute allowedRoles={["SINH_VIEN"]} />}>
                 <Route path="/mental-health" element={<UpcomingFeature />} />

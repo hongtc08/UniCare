@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Calendar, Clock, Heart, LayoutDashboard, ClipboardList, TriangleAlert, ChartColumn, FileChartColumn, Bell, Settings, Users, FolderTree } from "lucide-react";
+import { Activity, BookOpen, Calendar, Clock, Heart, LayoutDashboard, ClipboardList, TriangleAlert, ChartColumn, FileChartColumn, Bell, Settings, Users, FolderTree, CalendarRange } from "lucide-react";
 
 export const navigation = {
   SINH_VIEN: [
@@ -10,11 +10,13 @@ export const navigation = {
   ],
   NHAN_VIEN_Y_TE: [
     { to: "/medical-list", label: "Lịch hôm nay", icon: Clock },
+    { to: "/shifts", label: "Lịch trực ca khám", icon: CalendarRange },
     { to: "/medical-records", label: "Hồ sơ bệnh án", icon: ClipboardList },
     { to: "/emergency", label: "Cấp cứu & chuyển viện", icon: TriangleAlert },
   ],
   BAN_QUAN_LY: [
     { to: "/dashboard", label: "Bảng điều hành", icon: ChartColumn },
+    { to: "/shifts", label: "Quản lý lịch trực & ca", icon: CalendarRange },
     { to: "/admin/accounts", label: "Quản lý tài khoản", icon: Users },
     { to: "/admin/catalogs", label: "Danh mục dùng chung", icon: FolderTree },
     { to: "/admin/reports", label: "Thống kê & báo cáo", icon: FileChartColumn },
@@ -22,4 +24,3 @@ export const navigation = {
     { to: "/admin/settings", label: "Cài đặt hệ thống", icon: Settings },
   ],
 };
-
