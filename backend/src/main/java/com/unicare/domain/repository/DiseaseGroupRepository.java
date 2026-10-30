@@ -7,14 +7,9 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface DiseaseGroupRepository extends JpaRepository<DiseaseGroup, Integer> {
-
-    Optional<DiseaseGroup> findByGroupCode(String groupCode);
-
-    Optional<DiseaseGroup> findByGroupCodeIgnoreCase(String groupCode);
 
     boolean existsByGroupCodeIgnoreCase(String groupCode);
 
@@ -31,4 +26,3 @@ public interface DiseaseGroupRepository extends JpaRepository<DiseaseGroup, Inte
            "ORDER BY dg.id ASC")
     List<DiseaseGroup> searchDiseaseGroups(@Param("search") String search);
 }
-

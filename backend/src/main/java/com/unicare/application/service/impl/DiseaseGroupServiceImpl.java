@@ -6,6 +6,7 @@ import com.unicare.application.service.DiseaseGroupService;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
+import com.unicare.common.util.ValidationUtils;
 import com.unicare.domain.entity.DiseaseGroup;
 import com.unicare.domain.repository.DiseaseGroupRepository;
 import org.springframework.stereotype.Service;
@@ -26,9 +27,7 @@ public class DiseaseGroupServiceImpl implements DiseaseGroupService {
     @Override
     @Transactional(readOnly = true)
     public List<DiseaseGroupResponse> getDiseaseGroups(String search) {
-        String cleanSearch = search == null ? "" : search.trim();
-        List<DiseaseGroup> list = diseaseGroupRepository.searchDiseaseGroups(cleanSearch);
-        return list.stream()
+        return diseaseGroupRepository.searchDiseaseGroups(ValidationUtils.cleanSearch(search)).stream()
                 .map(DiseaseGroupResponse::fromEntity)
                 .collect(Collectors.toList());
     }
@@ -36,33 +35,15 @@ public class DiseaseGroupServiceImpl implements DiseaseGroupService {
     @Override
     @Transactional(readOnly = true)
     public DiseaseGroupResponse getDiseaseGroupById(Integer id) {
-        DiseaseGroup group = diseaseGroupRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhóm bệnh với mã ID: " + id));
-        return DiseaseGroupResponse.fromEntity(group);
+        return DiseaseGroupResponse.fromEntity(findGroupById(id));
     }
 
     @Override
     @Transactional
     public DiseaseGroupResponse createDiseaseGroup(DiseaseGroupRequest request) {
-        if (request == null) {
-            throw new BadRequestException("Dữ liệu nhóm bệnh không được để trống");
-        }
-
-        String cleanCode = request.getGroupCode() != null ? request.getGroupCode().trim() : "";
-        String cleanName = request.getGroupName() != null ? request.getGroupName().trim() : "";
-
-        if (cleanCode.isEmpty()) {
-            throw new BadRequestException("Mã nhóm bệnh không được để trống");
-        }
-        if (cleanName.isEmpty()) {
-            throw new BadRequestException("Tên nhóm bệnh không được để trống");
-        }
-        if (cleanCode.length() > 10) {
-            throw new BadRequestException("Mã nhóm bệnh không được vượt quá 10 ký tự");
-        }
-        if (cleanName.length() > 60) {
-            throw new BadRequestException("Tên nhóm bệnh không được vượt quá 60 ký tự");
-        }
+        validateRequestNotNull(request);
+        String cleanCode = ValidationUtils.requireBoundedText(request.getGroupCode(), 10, "Mã nhóm bệnh");
+        String cleanName = ValidationUtils.requireBoundedText(request.getGroupName(), 60, "Tên nhóm bệnh");
 
         if (diseaseGroupRepository.existsByGroupCodeIgnoreCase(cleanCode)) {
             throw new DuplicateResourceException("Mã nhóm bệnh '" + cleanCode + "' đã tồn tại trên hệ thống.");
@@ -71,40 +52,18 @@ public class DiseaseGroupServiceImpl implements DiseaseGroupService {
             throw new DuplicateResourceException("Tên nhóm bệnh '" + cleanName + "' đã tồn tại trên hệ thống.");
         }
 
-        DiseaseGroup diseaseGroup = DiseaseGroup.builder()
-                .groupCode(cleanCode)
-                .groupName(cleanName)
-                .build();
-
-        DiseaseGroup savedGroup = diseaseGroupRepository.save(diseaseGroup);
+        DiseaseGroup savedGroup = diseaseGroupRepository.save(new DiseaseGroup(cleanCode, cleanName));
         return DiseaseGroupResponse.fromEntity(savedGroup);
     }
 
     @Override
     @Transactional
     public DiseaseGroupResponse updateDiseaseGroup(Integer id, DiseaseGroupRequest request) {
-        if (request == null) {
-            throw new BadRequestException("Dữ liệu nhóm bệnh không được để trống");
-        }
+        validateRequestNotNull(request);
+        DiseaseGroup diseaseGroup = findGroupById(id);
 
-        DiseaseGroup diseaseGroup = diseaseGroupRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhóm bệnh với mã ID: " + id));
-
-        String cleanCode = request.getGroupCode() != null ? request.getGroupCode().trim() : "";
-        String cleanName = request.getGroupName() != null ? request.getGroupName().trim() : "";
-
-        if (cleanCode.isEmpty()) {
-            throw new BadRequestException("Mã nhóm bệnh không được để trống");
-        }
-        if (cleanName.isEmpty()) {
-            throw new BadRequestException("Tên nhóm bệnh không được để trống");
-        }
-        if (cleanCode.length() > 10) {
-            throw new BadRequestException("Mã nhóm bệnh không được vượt quá 10 ký tự");
-        }
-        if (cleanName.length() > 60) {
-            throw new BadRequestException("Tên nhóm bệnh không được vượt quá 60 ký tự");
-        }
+        String cleanCode = ValidationUtils.requireBoundedText(request.getGroupCode(), 10, "Mã nhóm bệnh");
+        String cleanName = ValidationUtils.requireBoundedText(request.getGroupName(), 60, "Tên nhóm bệnh");
 
         if (diseaseGroupRepository.existsByGroupCodeIgnoreCaseAndIdNot(cleanCode, id)) {
             throw new DuplicateResourceException("Mã nhóm bệnh '" + cleanCode + "' đã tồn tại trên hệ thống.");
@@ -116,17 +75,23 @@ public class DiseaseGroupServiceImpl implements DiseaseGroupService {
         diseaseGroup.setGroupCode(cleanCode);
         diseaseGroup.setGroupName(cleanName);
 
-        DiseaseGroup updatedGroup = diseaseGroupRepository.save(diseaseGroup);
-        return DiseaseGroupResponse.fromEntity(updatedGroup);
+        return DiseaseGroupResponse.fromEntity(diseaseGroupRepository.save(diseaseGroup));
     }
 
     @Override
     @Transactional
     public void deleteDiseaseGroup(Integer id) {
-        DiseaseGroup diseaseGroup = diseaseGroupRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhóm bệnh với mã ID: " + id));
+        diseaseGroupRepository.delete(findGroupById(id));
+    }
 
-        diseaseGroupRepository.delete(diseaseGroup);
+    private DiseaseGroup findGroupById(Integer id) {
+        return diseaseGroupRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhóm bệnh với mã ID: " + id));
+    }
+
+    private void validateRequestNotNull(DiseaseGroupRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Dữ liệu nhóm bệnh không được để trống");
+        }
     }
 }
-

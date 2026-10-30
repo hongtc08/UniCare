@@ -7,14 +7,9 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface FacultyRepository extends JpaRepository<Faculty, Integer> {
-
-    Optional<Faculty> findByFacultyCode(String facultyCode);
-
-    Optional<Faculty> findByFacultyCodeIgnoreCase(String facultyCode);
 
     boolean existsByFacultyCodeIgnoreCase(String facultyCode);
 
@@ -31,4 +26,3 @@ public interface FacultyRepository extends JpaRepository<Faculty, Integer> {
            "ORDER BY f.id ASC")
     List<Faculty> searchFaculties(@Param("search") String search);
 }
-
