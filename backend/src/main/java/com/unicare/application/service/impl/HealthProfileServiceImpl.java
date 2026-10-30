@@ -131,9 +131,6 @@ public class HealthProfileServiceImpl implements HealthProfileService {
     }
 
     private Student resolveOrCreateStudent(User user) {
-        if (studentRepository == null) {
-            return new Student(user.getId(), user, user.getUsername(), null);
-        }
         return studentRepository.findById(user.getId())
                 .orElseGet(() -> {
                     Student newStudent = new Student(user.getId(), user, user.getUsername(), null);
