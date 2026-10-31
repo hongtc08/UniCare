@@ -1,13 +1,16 @@
 package com.unicare.presentation.controller;
 
 import com.unicare.application.dto.request.ShiftRequest;
+import com.unicare.application.dto.response.DoctorOptionResponse;
 import com.unicare.application.dto.response.ShiftResponse;
 import com.unicare.application.service.ShiftService;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
+import com.unicare.domain.enums.Role;
 import com.unicare.domain.enums.ServiceType;
 import com.unicare.domain.enums.ShiftStatus;
+import com.unicare.domain.enums.UserStatus;
 import com.unicare.presentation.advice.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -60,7 +63,7 @@ class ShiftControllerTest {
         sampleResponse.setStartTime(LocalTime.of(8, 0));
         sampleResponse.setEndTime(LocalTime.of(9, 0));
         sampleResponse.setServiceType(ServiceType.KHAM_DA_KHOA);
-        sampleResponse.setRoom("Phòng 101");
+        sampleResponse.setRoom("P.101 - Phòng y tế");
         sampleResponse.setMaxQuantity(10);
         sampleResponse.setBookedQuantity(0);
         sampleResponse.setAvailableSlots(10);
@@ -68,18 +71,37 @@ class ShiftControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/shifts - Trả về danh sách ca khám thành công")
+    @DisplayName("GET /api/shifts - Trả về danh sách ca khám (hỗ trợ lọc theo room) thành công")
     void getShifts_ReturnsList() throws Exception {
-        when(shiftService.getShifts(any(), any(), any(), any(), any(), any()))
+        when(shiftService.getShifts(any(), any(), any(), any(), any(), any(), eq("P.101")))
                 .thenReturn(List.of(sampleResponse));
 
         mockMvc.perform(get("/api/shifts")
-                        .param("serviceType", "KHAM_DA_KHOA"))
+                        .param("serviceType", "KHAM_DA_KHOA")
+                        .param("room", "P.101"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[0].id").value(1))
                 .andExpect(jsonPath("$.data[0].serviceType").value("KHAM_DA_KHOA"))
+                .andExpect(jsonPath("$.data[0].room").value("P.101 - Phòng y tế"))
                 .andExpect(jsonPath("$.data[0].status").value("CON_TRONG"));
+    }
+
+    @Test
+    @DisplayName("GET /api/shifts/doctors - Trả về danh sách bác sĩ rút gọn cho Dropdown")
+    void getAvailableDoctors_ReturnsList() throws Exception {
+        DoctorOptionResponse doctor = new DoctorOptionResponse(
+                10L, "bs01", "BS. Nguyễn Văn Y", "BS. Nguyễn Văn Y", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE
+        );
+        when(shiftService.getAvailableDoctors()).thenReturn(List.of(doctor));
+
+        mockMvc.perform(get("/api/shifts/doctors"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].id").value(10))
+                .andExpect(jsonPath("$.data[0].name").value("BS. Nguyễn Văn Y"))
+                .andExpect(jsonPath("$.data[0].fullName").value("BS. Nguyễn Văn Y"))
+                .andExpect(jsonPath("$.data[0].role").value("NHAN_VIEN_Y_TE"));
     }
 
     @Test
@@ -109,7 +131,7 @@ class ShiftControllerTest {
                   "startTime": "08:00",
                   "endTime": "09:00",
                   "serviceType": "KHAM_DA_KHOA",
-                  "room": "Phòng 101",
+                  "room": "P.101 - Phòng y tế",
                   "maxQuantity": 10
                 }
                 """;
@@ -145,7 +167,7 @@ class ShiftControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/shifts - Trùng khung giờ bác sĩ trong ngày trả về 409 Conflict")
+    @DisplayName("POST /api/shifts - Trùng khung giờ bác sĩ hoặc phòng khám trong ngày trả về 409 Conflict")
     void createShift_Overlap_Returns409() throws Exception {
         String jsonBody = """
                 {
@@ -154,20 +176,20 @@ class ShiftControllerTest {
                   "gioBatDau": "08:00",
                   "gioKetThuc": "09:00",
                   "loaiCaKham": "TU_VAN_TAM_LY",
-                  "phongKham": "Phòng 102",
+                  "phongKham": "P.102 - Phòng tư vấn tâm lý",
                   "soLuongToiDa": 5
                 }
                 """;
 
         when(shiftService.createShift(any(ShiftRequest.class), any()))
-                .thenThrow(new DuplicateResourceException("Bác sĩ đã có ca khám trùng khung giờ trong ngày."));
+                .thenThrow(new DuplicateResourceException("Phòng khám 'P.102 - Phòng tư vấn tâm lý' đã có ca khám trùng khung giờ trong ngày 2026-10-28."));
 
         mockMvc.perform(post("/api/shifts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonBody))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Bác sĩ đã có ca khám trùng khung giờ trong ngày."));
+                .andExpect(jsonPath("$.message").value("Phòng khám 'P.102 - Phòng tư vấn tâm lý' đã có ca khám trùng khung giờ trong ngày 2026-10-28."));
     }
 
     @Test
@@ -180,7 +202,7 @@ class ShiftControllerTest {
                   "startTime": "08:00",
                   "endTime": "09:30",
                   "serviceType": "KHAM_DA_KHOA",
-                  "room": "Phòng 101",
+                  "room": "P.101 - Phòng y tế",
                   "maxQuantity": 15
                 }
                 """;
