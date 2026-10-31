@@ -48,4 +48,30 @@ public interface ShiftRepository extends JpaRepository<Shift, Long> {
             @Param("startTime") LocalTime startTime,
             @Param("endTime") LocalTime endTime
     );
+
+    @Query("SELECT COUNT(s) > 0 FROM Shift s WHERE " +
+           "s.room IS NOT NULL AND LOWER(s.room) = LOWER(:room) AND " +
+           "s.shiftDate = :shiftDate AND " +
+           "s.status <> com.unicare.domain.enums.ShiftStatus.DA_HUY AND " +
+           "s.startTime < :endTime AND s.endTime > :startTime")
+    boolean existsOverlappingRoom(
+            @Param("room") String room,
+            @Param("shiftDate") LocalDate shiftDate,
+            @Param("startTime") LocalTime startTime,
+            @Param("endTime") LocalTime endTime
+    );
+
+    @Query("SELECT COUNT(s) > 0 FROM Shift s WHERE " +
+           "s.id <> :excludeId AND " +
+           "s.room IS NOT NULL AND LOWER(s.room) = LOWER(:room) AND " +
+           "s.shiftDate = :shiftDate AND " +
+           "s.status <> com.unicare.domain.enums.ShiftStatus.DA_HUY AND " +
+           "s.startTime < :endTime AND s.endTime > :startTime")
+    boolean existsOverlappingRoomExcludingId(
+            @Param("excludeId") Long excludeId,
+            @Param("room") String room,
+            @Param("shiftDate") LocalDate shiftDate,
+            @Param("startTime") LocalTime startTime,
+            @Param("endTime") LocalTime endTime
+    );
 }

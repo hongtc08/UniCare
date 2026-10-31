@@ -1,6 +1,7 @@
 package com.unicare.application.service;
 
 import com.unicare.application.dto.request.ShiftRequest;
+import com.unicare.application.dto.response.DoctorOptionResponse;
 import com.unicare.application.dto.response.ShiftResponse;
 import com.unicare.application.service.impl.ShiftServiceImpl;
 import com.unicare.common.exception.BadRequestException;
@@ -69,7 +70,7 @@ class ShiftServiceImplTest {
     }
 
     @Test
-    @DisplayName("Lấy danh sách ca khám và lọc theo các tiêu chí thành công")
+    @DisplayName("Lấy danh sách ca khám và lọc theo các tiêu chí (bao gồm room) thành công")
     void getShifts_Success_WithFilters() {
         when(shiftRepository.findAllWithDoctor()).thenReturn(List.of(sampleShift));
 
@@ -83,19 +84,47 @@ class ShiftServiceImplTest {
                 sampleDate.plusDays(1),
                 10L,
                 ServiceType.KHAM_DA_KHOA,
-                ShiftStatus.CON_TRONG
+                ShiftStatus.CON_TRONG,
+                "Phòng 101"
         );
         assertThat(filteredMatch).hasSize(1);
 
-        List<ShiftResponse> filteredMismatch = shiftService.getShifts(
+        List<ShiftResponse> filteredRoomMismatch = shiftService.getShifts(
                 sampleDate,
                 null,
                 null,
                 10L,
-                ServiceType.TU_VAN_TAM_LY,
-                null
+                ServiceType.KHAM_DA_KHOA,
+                null,
+                "Phòng 999"
         );
-        assertThat(filteredMismatch).isEmpty();
+        assertThat(filteredRoomMismatch).isEmpty();
+
+        List<ShiftResponse> filteredRoomAll = shiftService.getShifts(
+                sampleDate,
+                null,
+                null,
+                10L,
+                ServiceType.KHAM_DA_KHOA,
+                null,
+                "ALL"
+        );
+        assertThat(filteredRoomAll).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Lấy danh sách bác sĩ đang hoạt động cho Dropdown thành công")
+    void getAvailableDoctors_Success() {
+        when(userRepository.searchUsers("", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE))
+                .thenReturn(List.of(sampleDoctor));
+
+        List<DoctorOptionResponse> doctors = shiftService.getAvailableDoctors();
+
+        assertThat(doctors).hasSize(1);
+        assertThat(doctors.get(0).getId()).isEqualTo(10L);
+        assertThat(doctors.get(0).getName()).isEqualTo("BS. Nguyễn Văn Y");
+        assertThat(doctors.get(0).getFullName()).isEqualTo("BS. Nguyễn Văn Y");
+        assertThat(doctors.get(0).getRole()).isEqualTo(Role.NHAN_VIEN_Y_TE);
     }
 
     @Test
@@ -104,7 +133,7 @@ class ShiftServiceImplTest {
         LocalDate from = LocalDate.of(2026, 10, 30);
         LocalDate to = LocalDate.of(2026, 10, 25);
 
-        assertThatThrownBy(() -> shiftService.getShifts(null, from, to, null, null, null))
+        assertThatThrownBy(() -> shiftService.getShifts(null, from, to, null, null, null, null))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("Ngày kết thúc tìm kiếm không được nhỏ hơn ngày bắt đầu");
     }
@@ -124,7 +153,7 @@ class ShiftServiceImplTest {
     }
 
     @Test
-    @DisplayName("Tạo ca khám mới thành công với doctorId hợp lệ")
+    @DisplayName("Tạo ca khám mới thành công với doctorId và room hợp lệ")
     void createShift_Success() {
         ShiftRequest request = new ShiftRequest(
                 10L,
@@ -138,6 +167,8 @@ class ShiftServiceImplTest {
 
         when(userRepository.findById(10L)).thenReturn(Optional.of(sampleDoctor));
         when(shiftRepository.existsOverlappingShift(10L, sampleDate, LocalTime.of(9, 0), LocalTime.of(10, 0)))
+                .thenReturn(false);
+        when(shiftRepository.existsOverlappingRoom("Phòng Tư vấn 2", sampleDate, LocalTime.of(9, 0), LocalTime.of(10, 0)))
                 .thenReturn(false);
         when(shiftRepository.save(any(Shift.class))).thenAnswer(inv -> {
             Shift s = inv.getArgument(0);
@@ -216,6 +247,35 @@ class ShiftServiceImplTest {
     }
 
     @Test
+    @DisplayName("Chặn tạo và cập nhật ca khám khi trùng lịch Phòng khám trong cùng khung giờ và ngày (409)")
+    void createAndUpdateShift_OverlappingRoom_ThrowsDuplicateResourceException() {
+        ShiftRequest createReq = new ShiftRequest(
+                10L, sampleDate, LocalTime.of(8, 0), LocalTime.of(11, 0), ServiceType.KHAM_DA_KHOA, "P.101 - Phòng y tế", 10
+        );
+
+        when(userRepository.findById(10L)).thenReturn(Optional.of(sampleDoctor));
+        when(shiftRepository.existsOverlappingShift(10L, sampleDate, LocalTime.of(8, 0), LocalTime.of(11, 0)))
+                .thenReturn(false);
+        when(shiftRepository.existsOverlappingRoom("P.101 - Phòng y tế", sampleDate, LocalTime.of(8, 0), LocalTime.of(11, 0)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> shiftService.createShift(createReq, "admin01"))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("Phòng khám 'P.101 - Phòng y tế' đã có ca khám trùng khung giờ");
+
+        // Khi cập nhật ca khám sang phòng đang bận
+        when(shiftRepository.findByIdWithDoctor(100L)).thenReturn(Optional.of(sampleShift));
+        when(shiftRepository.existsOverlappingShiftExcludingId(100L, 10L, sampleDate, LocalTime.of(8, 0), LocalTime.of(11, 0)))
+                .thenReturn(false);
+        when(shiftRepository.existsOverlappingRoomExcludingId(100L, "P.101 - Phòng y tế", sampleDate, LocalTime.of(8, 0), LocalTime.of(11, 0)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> shiftService.updateShift(100L, createReq, "admin01"))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("Phòng khám 'P.101 - Phòng y tế' đã có ca khám trùng khung giờ");
+    }
+
+    @Test
     @DisplayName("Chặn gán ca khám cho tài khoản không phải Bác sĩ hoặc đang bị khóa")
     void createShift_InvalidOrLockedDoctor_ThrowsBadRequest() {
         User studentUser = new User("sv01", "pwd", "Sinh Viên A", Role.SINH_VIEN, UserStatus.ACTIVE);
@@ -267,6 +327,9 @@ class ShiftServiceImplTest {
         when(shiftRepository.existsOverlappingShiftExcludingId(
                 100L, 10L, sampleDate, LocalTime.of(8, 0), LocalTime.of(9, 30)
         )).thenReturn(false);
+        when(shiftRepository.existsOverlappingRoomExcludingId(
+                100L, "Phòng 102", sampleDate, LocalTime.of(8, 0), LocalTime.of(9, 30)
+        )).thenReturn(false);
         when(shiftRepository.save(any(Shift.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ShiftResponse response = shiftService.updateShift(100L, request, "bs01");
@@ -279,7 +342,6 @@ class ShiftServiceImplTest {
     @Test
     @DisplayName("Chặn cập nhật giảm số lượng tối đa thấp hơn số lịch hẹn đã đặt")
     void updateShift_MaxQuantityLessThanBooked_ThrowsBadRequest() {
-        // sampleShift đang có bookedQuantity = 3
         ShiftRequest request = new ShiftRequest(
                 10L,
                 sampleDate,
@@ -317,7 +379,6 @@ class ShiftServiceImplTest {
     @Test
     @DisplayName("Chặn xóa ca khám khi đã có lịch hẹn, cho phép xóa khi chưa có lịch hẹn")
     void deleteShift_ChecksBookedQuantity() {
-        // 1. Ca khám đã có 3 lịch hẹn -> Chặn xóa
         when(shiftRepository.findByIdWithDoctor(100L)).thenReturn(Optional.of(sampleShift));
 
         assertThatThrownBy(() -> shiftService.deleteShift(100L))
@@ -326,7 +387,6 @@ class ShiftServiceImplTest {
 
         verify(shiftRepository, never()).delete(any());
 
-        // 2. Ca khám chưa có lịch hẹn (bookedQuantity = 0) -> Cho phép xóa
         sampleShift.setBookedQuantity(0);
         shiftService.deleteShift(100L);
 
