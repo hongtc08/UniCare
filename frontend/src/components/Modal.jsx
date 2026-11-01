@@ -7,6 +7,7 @@ export default function Modal({
   title,
   children,
   busy = false,
+  className = "",
 }) {
   const dialog = useRef(null);
   const titleId = useId();
@@ -30,7 +31,7 @@ export default function Modal({
   return (
     <dialog
       ref={dialog}
-      className="app-dialog"
+      className={`app-dialog ${className}`}
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault();
