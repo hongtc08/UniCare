@@ -63,4 +63,12 @@ class HealthInsuranceStatusTest {
         assertThat(HealthInsuranceStatus.calculate(null, today))
                 .isEqualTo(HealthInsuranceStatus.DA_HET_HAN);
     }
+
+    @Test
+    @DisplayName("ReferenceDate là null -> Tự động dùng LocalDate.now()")
+    void calculate_NullToday_UsesCurrentDate() {
+        LocalDate future = LocalDate.now().plusDays(60);
+        assertThat(HealthInsuranceStatus.calculate(future, null))
+                .isEqualTo(HealthInsuranceStatus.DANG_HIEU_LUC);
+    }
 }

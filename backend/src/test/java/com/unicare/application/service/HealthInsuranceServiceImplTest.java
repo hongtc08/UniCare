@@ -290,6 +290,19 @@ class HealthInsuranceServiceImplTest {
         }
 
         @Test
+        @DisplayName("Sinh viên chưa có thẻ BHYT trả về danh sách rỗng")
+        void getHealthInsurances_AsStudent_NoCard_ReturnsEmpty() {
+                when(userRepository.findByUsername("sv22120001")).thenReturn(Optional.of(studentUser));
+                when(healthInsuranceRepository.findByStudentIdWithDetails(10L))
+                                .thenReturn(Optional.empty());
+
+                List<HealthInsuranceResponse> responses = healthInsuranceService.getHealthInsurances(null, null,
+                                "sv22120001");
+
+                assertThat(responses).isEmpty();
+        }
+
+        @Test
         @DisplayName("Lấy chi tiết thẻ BHYT theo ID thành công")
         void getHealthInsuranceById_Success() {
                 when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
@@ -300,6 +313,17 @@ class HealthInsuranceServiceImplTest {
                 assertThat(response).isNotNull();
                 assertThat(response.getId()).isEqualTo(100L);
                 assertThat(response.getStudentCode()).isEqualTo("sv22120001");
+        }
+
+        @Test
+        @DisplayName("Lấy chi tiết thẻ BHYT theo ID thất bại khi không tìm thấy (404)")
+        void getHealthInsuranceById_NotFound_ThrowsException() {
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+                when(healthInsuranceRepository.findByIdWithDetails(999L)).thenReturn(Optional.empty());
+
+                assertThatThrownBy(() -> healthInsuranceService.getHealthInsuranceById(999L, "admin01"))
+                                .isInstanceOf(ResourceNotFoundException.class)
+                                .hasMessageContaining("Không tìm thấy thẻ BHYT với mã ID");
         }
 
         @Test
@@ -322,6 +346,41 @@ class HealthInsuranceServiceImplTest {
                 when(healthInsuranceRepository.findByIdWithDetails(999L)).thenReturn(Optional.of(otherInsurance));
 
                 assertThatThrownBy(() -> healthInsuranceService.getHealthInsuranceById(999L, "sv22120001"))
+                                .isInstanceOf(AccessDeniedException.class)
+                                .hasMessageContaining("chỉ được phép xem thông tin thẻ BHYT của chính mình");
+        }
+
+        @Test
+        @DisplayName("Lấy chi tiết thẻ BHYT theo studentId thành công (Admin)")
+        void getHealthInsuranceByStudentId_Success_AsAdmin() {
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+                when(healthInsuranceRepository.findByStudentIdWithDetails(10L))
+                                .thenReturn(Optional.of(sampleInsurance));
+
+                HealthInsuranceResponse response = healthInsuranceService.getHealthInsuranceByStudentId(10L, "admin01");
+
+                assertThat(response).isNotNull();
+                assertThat(response.getStudentId()).isEqualTo(10L);
+                assertThat(response.getCardNumber()).isEqualTo("SV4791234567890");
+        }
+
+        @Test
+        @DisplayName("Lấy chi tiết thẻ BHYT theo studentId thất bại khi không tìm thấy (404)")
+        void getHealthInsuranceByStudentId_NotFound_ThrowsException() {
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+                when(healthInsuranceRepository.findByStudentIdWithDetails(999L)).thenReturn(Optional.empty());
+
+                assertThatThrownBy(() -> healthInsuranceService.getHealthInsuranceByStudentId(999L, "admin01"))
+                                .isInstanceOf(ResourceNotFoundException.class)
+                                .hasMessageContaining("Không tìm thấy thẻ BHYT cho sinh viên");
+        }
+
+        @Test
+        @DisplayName("Sinh viên không được lấy thẻ BHYT của sinh viên khác qua studentId (403)")
+        void getHealthInsuranceByStudentId_StudentAccessDenied() {
+                when(userRepository.findByUsername("sv22120001")).thenReturn(Optional.of(studentUser));
+
+                assertThatThrownBy(() -> healthInsuranceService.getHealthInsuranceByStudentId(99L, "sv22120001"))
                                 .isInstanceOf(AccessDeniedException.class)
                                 .hasMessageContaining("chỉ được phép xem thông tin thẻ BHYT của chính mình");
         }
@@ -352,6 +411,60 @@ class HealthInsuranceServiceImplTest {
         }
 
         @Test
+        @DisplayName("Cập nhật thẻ BHYT thành công có nơi cấp thẻ issueAt")
+        void updateHealthInsurance_Success_WithIssueAt() {
+                HealthInsuranceRequest request = new HealthInsuranceRequest(
+                                "0791234567",
+                                10L,
+                                LocalDate.now(),
+                                LocalDate.now().plusYears(1),
+                                "Bệnh viện Đa khoa Sài Gòn",
+                                "BHXH Quận 1");
+
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+                when(healthInsuranceRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(sampleInsurance));
+                when(healthInsuranceRepository.existsByCardNumberIgnoreCaseAndIdNot("0791234567", 100L))
+                                .thenReturn(false);
+                when(healthInsuranceRepository.save(any(HealthInsurance.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                HealthInsuranceResponse response = healthInsuranceService.updateHealthInsurance(100L, request,
+                                "admin01");
+
+                assertThat(response.getIssueAt()).isEqualTo("BHXH Quận 1");
+        }
+
+        @Test
+        @DisplayName("Cập nhật thẻ BHYT thất bại khi không tìm thấy thẻ (404)")
+        void updateHealthInsurance_NotFound_ThrowsException() {
+                HealthInsuranceRequest request = new HealthInsuranceRequest(
+                                "0791234567", 10L, LocalDate.now(), LocalDate.now().plusYears(1), "BV A");
+
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+                when(healthInsuranceRepository.findByIdWithDetails(999L)).thenReturn(Optional.empty());
+
+                assertThatThrownBy(() -> healthInsuranceService.updateHealthInsurance(999L, request, "admin01"))
+                                .isInstanceOf(ResourceNotFoundException.class)
+                                .hasMessageContaining("Không tìm thấy thẻ BHYT với mã ID");
+        }
+
+        @Test
+        @DisplayName("Cập nhật thẻ BHYT thất bại khi trùng số thẻ với thẻ khác (409)")
+        void updateHealthInsurance_DuplicateCardNumber_ThrowsConflict() {
+                HealthInsuranceRequest request = new HealthInsuranceRequest(
+                                "0791234567", 10L, LocalDate.now(), LocalDate.now().plusYears(1), "BV A");
+
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+                when(healthInsuranceRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(sampleInsurance));
+                when(healthInsuranceRepository.existsByCardNumberIgnoreCaseAndIdNot("0791234567", 100L))
+                                .thenReturn(true);
+
+                assertThatThrownBy(() -> healthInsuranceService.updateHealthInsurance(100L, request, "admin01"))
+                                .isInstanceOf(DuplicateResourceException.class)
+                                .hasMessageContaining("đã tồn tại trên hệ thống");
+        }
+
+        @Test
         @DisplayName("Xóa thẻ BHYT thành công")
         void deleteHealthInsurance_Success() {
                 when(healthInsuranceRepository.findById(100L)).thenReturn(Optional.of(sampleInsurance));
@@ -359,5 +472,127 @@ class HealthInsuranceServiceImplTest {
                 healthInsuranceService.deleteHealthInsurance(100L, "admin01");
 
                 verify(healthInsuranceRepository).delete(sampleInsurance);
+        }
+
+        @Test
+        @DisplayName("Xóa thẻ BHYT thất bại khi không tìm thấy thẻ (404)")
+        void deleteHealthInsurance_NotFound_ThrowsException() {
+                when(healthInsuranceRepository.findById(999L)).thenReturn(Optional.empty());
+
+                assertThatThrownBy(() -> healthInsuranceService.deleteHealthInsurance(999L, "admin01"))
+                                .isInstanceOf(ResourceNotFoundException.class)
+                                .hasMessageContaining("Không tìm thấy thẻ BHYT với mã ID");
+        }
+
+        @Test
+        @DisplayName("Thao tác thất bại khi username rỗng hoặc null (403)")
+        void resolveCurrentUser_BlankUsername_ThrowsAccessDenied() {
+                assertThatThrownBy(() -> healthInsuranceService.getHealthInsurances(null, null, null))
+                                .isInstanceOf(AccessDeniedException.class)
+                                .hasMessageContaining("Yêu cầu đăng nhập");
+
+                assertThatThrownBy(() -> healthInsuranceService.getHealthInsurances(null, null, "   "))
+                                .isInstanceOf(AccessDeniedException.class)
+                                .hasMessageContaining("Yêu cầu đăng nhập");
+        }
+
+        @Test
+        @DisplayName("Thao tác thất bại khi không tìm thấy tài khoản (404)")
+        void resolveCurrentUser_UserNotFound_ThrowsException() {
+                when(userRepository.findByUsername("unknown")).thenReturn(Optional.empty());
+
+                assertThatThrownBy(() -> healthInsuranceService.getHealthInsurances(null, null, "unknown"))
+                                .isInstanceOf(ResourceNotFoundException.class)
+                                .hasMessageContaining("Không tìm thấy tài khoản");
+        }
+
+        @Test
+        @DisplayName("Admin tạo thẻ BHYT thất bại khi không truyền studentId (400)")
+        void createHealthInsurance_AdminMissingStudentId_ThrowsBadRequest() {
+                HealthInsuranceRequest request = new HealthInsuranceRequest(
+                                "0791234567", null, LocalDate.now(), LocalDate.now().plusYears(1), "BV A");
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+
+                assertThatThrownBy(() -> healthInsuranceService.createHealthInsurance(request, "admin01"))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("Vui lòng cung cấp mã ID sinh viên");
+        }
+
+        @Test
+        @DisplayName("Tự động tạo bản ghi Student nếu sinh viên chưa có trong bảng Student")
+        void createHealthInsurance_StudentAutoCreatedFromUser() {
+                HealthInsuranceRequest request = new HealthInsuranceRequest(
+                                "0791234567", 10L, LocalDate.now(), LocalDate.now().plusYears(1), "BV A");
+
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+                when(healthInsuranceRepository.existsByCardNumberIgnoreCase("0791234567")).thenReturn(false);
+                when(studentRepository.findById(10L)).thenReturn(Optional.empty());
+                when(userRepository.findById(10L)).thenReturn(Optional.of(studentUser));
+                when(studentRepository.save(any(Student.class))).thenReturn(student);
+                when(healthInsuranceRepository.existsByStudentId(10L)).thenReturn(false);
+                when(healthInsuranceRepository.save(any(HealthInsurance.class))).thenReturn(sampleInsurance);
+
+                HealthInsuranceResponse response = healthInsuranceService.createHealthInsurance(request, "admin01");
+
+                assertThat(response).isNotNull();
+                verify(studentRepository).save(any(Student.class));
+        }
+
+        @Test
+        @DisplayName("Tạo thẻ BHYT thất bại khi studentId không tồn tại trong hệ thống (404)")
+        void createHealthInsurance_StudentNotFoundInUserRepo_ThrowsException() {
+                HealthInsuranceRequest request = new HealthInsuranceRequest(
+                                "0791234567", 999L, LocalDate.now(), LocalDate.now().plusYears(1), "BV A");
+
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+                when(healthInsuranceRepository.existsByCardNumberIgnoreCase("0791234567")).thenReturn(false);
+                when(studentRepository.findById(999L)).thenReturn(Optional.empty());
+                when(userRepository.findById(999L)).thenReturn(Optional.empty());
+
+                assertThatThrownBy(() -> healthInsuranceService.createHealthInsurance(request, "admin01"))
+                                .isInstanceOf(ResourceNotFoundException.class)
+                                .hasMessageContaining("Không tìm thấy sinh viên với mã ID");
+        }
+
+        @Test
+        @DisplayName("Tạo thẻ BHYT thất bại khi studentId trỏ tới user không phải role SINH_VIEN (400)")
+        void createHealthInsurance_UserNotStudentRole_ThrowsBadRequest() {
+                User doctorUser = new User("bs01", "pwd", "Bác sĩ", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE);
+                doctorUser.setId(20L);
+
+                HealthInsuranceRequest request = new HealthInsuranceRequest(
+                                "0791234567", 20L, LocalDate.now(), LocalDate.now().plusYears(1), "BV A");
+
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+                when(healthInsuranceRepository.existsByCardNumberIgnoreCase("0791234567")).thenReturn(false);
+                when(studentRepository.findById(20L)).thenReturn(Optional.empty());
+                when(userRepository.findById(20L)).thenReturn(Optional.of(doctorUser));
+
+                assertThatThrownBy(() -> healthInsuranceService.createHealthInsurance(request, "admin01"))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("không phải là sinh viên");
+        }
+
+        @Test
+        @DisplayName("Tạo thẻ BHYT thất bại khi request null hoặc ngày hiệu lực null (400)")
+        void createHealthInsurance_NullRequestOrDates_ThrowsBadRequest() {
+                assertThatThrownBy(() -> healthInsuranceService.createHealthInsurance(null, "admin01"))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("Dữ liệu thẻ BHYT không được để trống");
+
+                HealthInsuranceRequest nullEffective = new HealthInsuranceRequest(
+                                "0791234567", 10L, null, LocalDate.now().plusYears(1), "BV A");
+                when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+
+                assertThatThrownBy(() -> healthInsuranceService.createHealthInsurance(nullEffective, "admin01"))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("Ngày bắt đầu hiệu lực không được để trống");
+
+                HealthInsuranceRequest nullExpiration = new HealthInsuranceRequest(
+                                "0791234567", 10L, LocalDate.now(), null, "BV A");
+
+                assertThatThrownBy(() -> healthInsuranceService.createHealthInsurance(nullExpiration, "admin01"))
+                                .isInstanceOf(BadRequestException.class)
+                                .hasMessageContaining("Ngày hết hạn không được để trống");
         }
 }
