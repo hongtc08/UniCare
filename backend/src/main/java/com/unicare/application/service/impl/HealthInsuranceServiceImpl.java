@@ -33,8 +33,7 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
     public HealthInsuranceServiceImpl(
             HealthInsuranceRepository healthInsuranceRepository,
             StudentRepository studentRepository,
-            UserRepository userRepository
-    ) {
+            UserRepository userRepository) {
         this.healthInsuranceRepository = healthInsuranceRepository;
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
@@ -53,7 +52,8 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
                     .orElse(Collections.emptyList());
         }
 
-        // Bác sĩ / Quản trị viên xem toàn bộ danh sách, có hỗ trợ tìm kiếm và lọc theo trạng thái
+        // Bác sĩ / Quản trị viên xem toàn bộ danh sách, có hỗ trợ tìm kiếm và lọc theo
+        // trạng thái
         String cleanSearch = ValidationUtils.cleanSearch(search);
         List<HealthInsurance> list = healthInsuranceRepository.searchHealthInsurances(cleanSearch);
 
@@ -81,7 +81,8 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
         validateStudentAccess(currentUser, studentId);
 
         HealthInsurance insurance = healthInsuranceRepository.findByStudentIdWithDetails(studentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thẻ BHYT cho sinh viên với mã ID: " + studentId));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy thẻ BHYT cho sinh viên với mã ID: " + studentId));
 
         return HealthInsuranceResponse.fromEntity(insurance, LocalDate.now());
     }
@@ -106,8 +107,12 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
         }
 
         String cleanHospital = ValidationUtils.requireBoundedText(
-                request.getInitialHospital(), 150, "Nơi đăng ký khám chữa bệnh ban đầu"
-        );
+                request.getInitialHospital(), 150, "Nơi đăng ký khám chữa bệnh ban đầu");
+
+        String cleanIssueAt = null;
+        if (request.getIssueAt() != null && !request.getIssueAt().isBlank()) {
+            cleanIssueAt = ValidationUtils.requireBoundedText(request.getIssueAt(), 150, "Nơi cấp/đổi thẻ BHYT");
+        }
 
         HealthInsurance insurance = HealthInsurance.builder()
                 .cardNumber(cleanCardNumber)
@@ -115,6 +120,7 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
                 .effectiveDate(request.getEffectiveDate())
                 .expirationDate(request.getExpirationDate())
                 .initialHospital(cleanHospital)
+                .issueAt(cleanIssueAt)
                 .build();
 
         HealthInsurance savedInsurance = healthInsuranceRepository.save(insurance);
@@ -123,7 +129,8 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
 
     @Override
     @Transactional
-    public HealthInsuranceResponse updateHealthInsurance(Long id, HealthInsuranceRequest request, String currentUsername) {
+    public HealthInsuranceResponse updateHealthInsurance(Long id, HealthInsuranceRequest request,
+            String currentUsername) {
         validateRequestNotNull(request);
         User currentUser = resolveCurrentUser(currentUsername);
 
@@ -139,13 +146,18 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
         }
 
         String cleanHospital = ValidationUtils.requireBoundedText(
-                request.getInitialHospital(), 150, "Nơi đăng ký khám chữa bệnh ban đầu"
-        );
+                request.getInitialHospital(), 150, "Nơi đăng ký khám chữa bệnh ban đầu");
+
+        String cleanIssueAt = null;
+        if (request.getIssueAt() != null && !request.getIssueAt().isBlank()) {
+            cleanIssueAt = ValidationUtils.requireBoundedText(request.getIssueAt(), 150, "Nơi cấp/đổi thẻ BHYT");
+        }
 
         insurance.setCardNumber(cleanCardNumber);
         insurance.setEffectiveDate(request.getEffectiveDate());
         insurance.setExpirationDate(request.getExpirationDate());
         insurance.setInitialHospital(cleanHospital);
+        insurance.setIssueAt(cleanIssueAt);
 
         HealthInsurance updatedInsurance = healthInsuranceRepository.save(insurance);
         return HealthInsuranceResponse.fromEntity(updatedInsurance, LocalDate.now());
@@ -192,15 +204,12 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
         return studentRepository.findById(studentId)
                 .orElseGet(() -> {
                     User user = userRepository.findById(studentId)
-                            .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sinh viên với mã ID: " + studentId));
+                            .orElseThrow(() -> new ResourceNotFoundException(
+                                    "Không tìm thấy sinh viên với mã ID: " + studentId));
                     if (user.getRole() != Role.SINH_VIEN) {
                         throw new BadRequestException("Người dùng (ID: " + studentId + ") không phải là sinh viên");
                     }
-                    Student newStudent = Student.builder()
-                            .id(user.getId())
-                            .user(user)
-                            .studentCode(user.getUsername())
-                            .build();
+                    Student newStudent = new Student(user.getId(), user, user.getUsername(), null);
                     return studentRepository.save(newStudent);
                 });
     }
@@ -223,4 +232,3 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
         }
     }
 }
-

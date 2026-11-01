@@ -17,6 +17,7 @@ public class HealthInsuranceResponse {
     private LocalDate effectiveDate;
     private LocalDate expirationDate;
     private String initialHospital;
+    private String issueAt;
     private String status;
     private String statusDescription;
     private Long daysRemaining;
@@ -33,6 +34,7 @@ public class HealthInsuranceResponse {
             LocalDate effectiveDate,
             LocalDate expirationDate,
             String initialHospital,
+            String issueAt,
             String status,
             String statusDescription,
             Long daysRemaining
@@ -45,6 +47,7 @@ public class HealthInsuranceResponse {
         this.effectiveDate = effectiveDate;
         this.expirationDate = expirationDate;
         this.initialHospital = initialHospital;
+        this.issueAt = issueAt;
         this.status = status;
         this.statusDescription = statusDescription;
         this.daysRemaining = daysRemaining;
@@ -66,6 +69,7 @@ public class HealthInsuranceResponse {
         response.setEffectiveDate(entity.getEffectiveDate());
         response.setExpirationDate(entity.getExpirationDate());
         response.setInitialHospital(entity.getInitialHospital());
+        response.setIssueAt(entity.getIssueAt());
 
         Student student = entity.getStudent();
         if (student != null) {
@@ -150,6 +154,14 @@ public class HealthInsuranceResponse {
         this.initialHospital = initialHospital;
     }
 
+    public String getIssueAt() {
+        return issueAt;
+    }
+
+    public void setIssueAt(String issueAt) {
+        this.issueAt = issueAt;
+    }
+
     public String getStatus() {
         return status;
     }
@@ -200,6 +212,7 @@ public class HealthInsuranceResponse {
         private LocalDate effectiveDate;
         private LocalDate expirationDate;
         private String initialHospital;
+        private String issueAt;
         private String status;
         private String statusDescription;
         private Long daysRemaining;
@@ -254,6 +267,11 @@ public class HealthInsuranceResponse {
             return this;
         }
 
+        public Builder issueAt(String issueAt) {
+            this.issueAt = issueAt;
+            return this;
+        }
+
         public Builder status(HealthInsuranceStatus status) {
             this.status = status != null ? status.name() : null;
             return this;
@@ -282,7 +300,7 @@ public class HealthInsuranceResponse {
         public HealthInsuranceResponse build() {
             return new HealthInsuranceResponse(
                     id, cardNumber, studentId, studentCode, studentName,
-                    effectiveDate, expirationDate, initialHospital,
+                    effectiveDate, expirationDate, initialHospital, issueAt,
                     status, statusDescription, daysRemaining
             );
         }

@@ -32,6 +32,9 @@ public class HealthInsuranceRequest {
     @Size(max = 150, message = "Nơi đăng ký khám chữa bệnh ban đầu không được vượt quá 150 ký tự")
     private String initialHospital;
 
+    @Size(max = 150, message = "Nơi cấp/đổi thẻ BHYT không được vượt quá 150 ký tự")
+    private String issueAt;
+
     public HealthInsuranceRequest() {
     }
 
@@ -47,6 +50,22 @@ public class HealthInsuranceRequest {
         this.effectiveDate = effectiveDate;
         this.expirationDate = expirationDate;
         this.initialHospital = initialHospital;
+    }
+
+    public HealthInsuranceRequest(
+            String cardNumber,
+            Long studentId,
+            LocalDate effectiveDate,
+            LocalDate expirationDate,
+            String initialHospital,
+            String issueAt
+    ) {
+        this.cardNumber = cardNumber;
+        this.studentId = studentId;
+        this.effectiveDate = effectiveDate;
+        this.expirationDate = expirationDate;
+        this.initialHospital = initialHospital;
+        this.issueAt = issueAt;
     }
 
     public String getCardNumber() {
@@ -87,5 +106,60 @@ public class HealthInsuranceRequest {
 
     public void setInitialHospital(String initialHospital) {
         this.initialHospital = initialHospital;
+    }
+
+    public String getIssueAt() {
+        return issueAt;
+    }
+
+    public void setIssueAt(String issueAt) {
+        this.issueAt = issueAt;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private String cardNumber;
+        private Long studentId;
+        private LocalDate effectiveDate;
+        private LocalDate expirationDate;
+        private String initialHospital;
+        private String issueAt;
+
+        public Builder cardNumber(String cardNumber) {
+            this.cardNumber = cardNumber;
+            return this;
+        }
+
+        public Builder studentId(Long studentId) {
+            this.studentId = studentId;
+            return this;
+        }
+
+        public Builder effectiveDate(LocalDate effectiveDate) {
+            this.effectiveDate = effectiveDate;
+            return this;
+        }
+
+        public Builder expirationDate(LocalDate expirationDate) {
+            this.expirationDate = expirationDate;
+            return this;
+        }
+
+        public Builder initialHospital(String initialHospital) {
+            this.initialHospital = initialHospital;
+            return this;
+        }
+
+        public Builder issueAt(String issueAt) {
+            this.issueAt = issueAt;
+            return this;
+        }
+
+        public HealthInsuranceRequest build() {
+            return new HealthInsuranceRequest(cardNumber, studentId, effectiveDate, expirationDate, initialHospital, issueAt);
+        }
     }
 }
