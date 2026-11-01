@@ -24,5 +24,10 @@ public class Faculty {
 
     @Column(name = "faculty_name", nullable = false, unique = true, length = 100)
     private String facultyName;
+
+    public Faculty(String facultyCode, String facultyName) {
+        this.facultyCode = facultyCode;
+        this.facultyName = facultyName;
+    }
 }
 

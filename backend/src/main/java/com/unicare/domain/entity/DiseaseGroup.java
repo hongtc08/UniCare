@@ -24,5 +24,10 @@ public class DiseaseGroup {
 
     @Column(name = "group_name", nullable = false, unique = true, length = 60)
     private String groupName;
+
+    public DiseaseGroup(String groupCode, String groupName) {
+        this.groupCode = groupCode;
+        this.groupName = groupName;
+    }
 }
 

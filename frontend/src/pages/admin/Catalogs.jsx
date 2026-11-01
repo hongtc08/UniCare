@@ -6,7 +6,7 @@ import {
   GraduationCap,
   HeartPulse,
   Pencil,
-  Pill,
+
   Plus,
   RefreshCw,
   Trash2,
@@ -27,7 +27,7 @@ const catalogIcons = {
   faculties: Building2,
   classes: GraduationCap,
   "disease-groups": HeartPulse,
-  medicines: Pill,
+
 };
 
 function CatalogContent({ resource }) {
@@ -41,13 +41,13 @@ function CatalogContent({ resource }) {
   const [deleting, setDeleting] = useState(null);
   const [message, setMessage] = useState("");
 
-  const facultyName = (id) =>
+  const facultyName = (id, fallback) =>
     faculties.records.find((faculty) => String(faculty.id) === String(id))
-      ?.name || "Chưa tải được khoa";
+      ?.name || fallback || "Chưa tải được khoa";
   const facultyUnavailable = resource === "classes" && (faculties.loading || Boolean(faculties.error) || !faculties.records.length);
   const filtered = records.filter((record) =>
     normalizeSearch(
-      `${record.code} ${record.name} ${record.cohort || ""} ${record.unit || ""} ${record.strength || ""}`,
+      `${record.code} ${record.name} ${record.cohort || ""}`,
     ).includes(normalizeSearch(query.trim())) &&
       (!facultyFilter || String(record.facultyId) === facultyFilter),
   );
@@ -66,13 +66,13 @@ function CatalogContent({ resource }) {
 
   const columns = [
     ...config.fields
-      .filter((field) => !field.multiline || resource !== "medicines")
+      .filter((field) => !field.multiline)
       .map((field) => ({
         key: field.name,
         label: field.label,
         render: (record) =>
           field.name === "facultyId" ? (
-            facultyName(record.facultyId)
+            facultyName(record.facultyId, record.facultyName)
           ) : field.name === "code" ? (
             <span className="record-code">{record.code}</span>
           ) : field.name === "name" ? (
