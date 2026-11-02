@@ -4,6 +4,7 @@
 package com.unicare.application.service.impl;
 
 import com.unicare.application.dto.request.ShiftRequest;
+import com.unicare.application.dto.response.DoctorOptionResponse;
 import com.unicare.application.dto.response.ShiftResponse;
 import com.unicare.application.service.ShiftService;
 import com.unicare.common.exception.BadRequestException;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,11 +46,16 @@ public class ShiftServiceImpl implements ShiftService {
             LocalDate toDate,
             Long doctorId,
             ServiceType serviceType,
-            ShiftStatus status
+            ShiftStatus status,
+            String room
     ) {
         if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
             throw new BadRequestException("Ngày kết thúc tìm kiếm không được nhỏ hơn ngày bắt đầu.");
         }
+
+        String cleanRoom = (room != null && !room.trim().isEmpty() && !"ALL".equalsIgnoreCase(room.trim()))
+                ? room.trim().toLowerCase(Locale.ROOT)
+                : null;
 
         List<Shift> shifts = shiftRepository.findAllWithDoctor();
         return shifts.stream()
@@ -58,7 +65,17 @@ public class ShiftServiceImpl implements ShiftService {
                 .filter(s -> doctorId == null || (s.getDoctor() != null && doctorId.equals(s.getDoctor().getId())))
                 .filter(s -> serviceType == null || serviceType == s.getServiceType())
                 .filter(s -> status == null || status == s.getStatus())
+                .filter(s -> cleanRoom == null || (s.getRoom() != null && s.getRoom().toLowerCase(Locale.ROOT).contains(cleanRoom)))
                 .map(ShiftResponse::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DoctorOptionResponse> getAvailableDoctors() {
+        List<User> doctors = userRepository.searchUsers("", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE);
+        return doctors.stream()
+                .map(DoctorOptionResponse::fromEntity)
                 .collect(Collectors.toList());
     }
 
@@ -92,6 +109,20 @@ public class ShiftServiceImpl implements ShiftService {
         String cleanRoom = (request.getRoom() != null && !request.getRoom().trim().isEmpty())
                 ? request.getRoom().trim()
                 : null;
+
+        if (cleanRoom != null) {
+            boolean roomOverlapping = shiftRepository.existsOverlappingRoom(
+                    cleanRoom,
+                    request.getShiftDate(),
+                    request.getStartTime(),
+                    request.getEndTime()
+            );
+            if (roomOverlapping) {
+                throw new DuplicateResourceException(
+                        "Phòng khám '" + cleanRoom + "' đã có ca khám trùng khung giờ trong ngày " + request.getShiftDate() + "."
+                );
+            }
+        }
 
         Shift shift = new Shift(
                 doctor,
@@ -141,7 +172,11 @@ public class ShiftServiceImpl implements ShiftService {
             nextStatus = bookedQty >= request.getMaxQuantity() ? ShiftStatus.DA_DAY : ShiftStatus.CON_TRONG;
         }
 
-        // Kiểm tra trùng khung giờ của cùng Bác sĩ trong ngày (bỏ qua nếu ca đang được hủy)
+        String cleanRoom = (request.getRoom() != null && !request.getRoom().trim().isEmpty())
+                ? request.getRoom().trim()
+                : null;
+
+        // Kiểm tra trùng khung giờ của Bác sĩ và Phòng khám trong ngày (bỏ qua nếu ca đang được hủy)
         if (nextStatus != ShiftStatus.DA_HUY) {
             boolean overlapping = shiftRepository.existsOverlappingShiftExcludingId(
                     id,
@@ -155,11 +190,22 @@ public class ShiftServiceImpl implements ShiftService {
                         "Bác sĩ " + doctor.getFullName() + " đã có ca khám trùng khung giờ trong ngày " + request.getShiftDate() + "."
                 );
             }
-        }
 
-        String cleanRoom = (request.getRoom() != null && !request.getRoom().trim().isEmpty())
-                ? request.getRoom().trim()
-                : null;
+            if (cleanRoom != null) {
+                boolean roomOverlapping = shiftRepository.existsOverlappingRoomExcludingId(
+                        id,
+                        cleanRoom,
+                        request.getShiftDate(),
+                        request.getStartTime(),
+                        request.getEndTime()
+                );
+                if (roomOverlapping) {
+                    throw new DuplicateResourceException(
+                            "Phòng khám '" + cleanRoom + "' đã có ca khám trùng khung giờ trong ngày " + request.getShiftDate() + "."
+                    );
+                }
+            }
+        }
 
         shift.setDoctor(doctor);
         shift.setShiftDate(request.getShiftDate());

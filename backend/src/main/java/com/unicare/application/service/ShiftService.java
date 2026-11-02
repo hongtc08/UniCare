@@ -4,6 +4,7 @@
 package com.unicare.application.service;
 
 import com.unicare.application.dto.request.ShiftRequest;
+import com.unicare.application.dto.response.DoctorOptionResponse;
 import com.unicare.application.dto.response.ShiftResponse;
 import com.unicare.domain.enums.ServiceType;
 import com.unicare.domain.enums.ShiftStatus;
@@ -19,8 +20,22 @@ public interface ShiftService {
             LocalDate toDate,
             Long doctorId,
             ServiceType serviceType,
-            ShiftStatus status
+            ShiftStatus status,
+            String room
     );
+
+    default List<ShiftResponse> getShifts(
+            LocalDate date,
+            LocalDate fromDate,
+            LocalDate toDate,
+            Long doctorId,
+            ServiceType serviceType,
+            ShiftStatus status
+    ) {
+        return getShifts(date, fromDate, toDate, doctorId, serviceType, status, null);
+    }
+
+    List<DoctorOptionResponse> getAvailableDoctors();
 
     ShiftResponse getShiftById(Long id);
 
