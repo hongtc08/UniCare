@@ -12,6 +12,23 @@
   --text-main: #0f172a;
   --text-muted: #64748b;
   --border-light: #e2e8f0;
+
+  /* Theme mở rộng cho quản lý ca khám & dịch vụ y tế */
+  --service-general-bg: #eff6ff;
+  --service-general-text: #1d4ed8;
+  --service-general-border: #bfdbfe;
+  
+  --service-psy-bg: #faf5ff;
+  --service-psy-text: #7e22ce;
+  --service-psy-border: #e9d5ff;
+
+  --shift-available-bg: #f0fdf4;
+  --shift-available-text: #166534;
+  --shift-available-border: #bbf7d0;
+
+  --shift-full-bg: #fef2f2;
+  --shift-full-text: #991b1b;
+  --shift-full-border: #fecaca;
 }
 
 body {
@@ -37,4 +54,3 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-
