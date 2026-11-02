@@ -17,19 +17,19 @@ import java.util.Optional;
 @Repository
 public interface ShiftRepository extends JpaRepository<Shift, Long> {
 
-    @Query("SELECT s FROM Shift s JOIN FETCH s.doctor ORDER BY s.shiftDate ASC, s.startTime ASC")
+    @Query("SELECT s FROM Shift s JOIN FETCH s.staff st JOIN FETCH st.user ORDER BY s.shiftDate ASC, s.startTime ASC")
     List<Shift> findAllWithDoctor();
 
-    @Query("SELECT s FROM Shift s JOIN FETCH s.doctor WHERE s.id = :id")
+    @Query("SELECT s FROM Shift s JOIN FETCH s.staff st JOIN FETCH st.user WHERE s.id = :id")
     Optional<Shift> findByIdWithDoctor(@Param("id") Long id);
 
     @Query("SELECT COUNT(s) > 0 FROM Shift s WHERE " +
-           "s.doctor.id = :doctorId AND " +
+           "s.staff.id = :staffId AND " +
            "s.shiftDate = :shiftDate AND " +
-           "s.status <> com.unicare.domain.enums.ShiftStatus.DA_HUY AND " +
+           "s.status <> com.unicare.domain.enums.ShiftStatus.ENDED AND " +
            "s.startTime < :endTime AND s.endTime > :startTime")
     boolean existsOverlappingShift(
-            @Param("doctorId") Long doctorId,
+            @Param("staffId") Long staffId,
             @Param("shiftDate") LocalDate shiftDate,
             @Param("startTime") LocalTime startTime,
             @Param("endTime") LocalTime endTime
@@ -37,13 +37,13 @@ public interface ShiftRepository extends JpaRepository<Shift, Long> {
 
     @Query("SELECT COUNT(s) > 0 FROM Shift s WHERE " +
            "s.id <> :excludeId AND " +
-           "s.doctor.id = :doctorId AND " +
+           "s.staff.id = :staffId AND " +
            "s.shiftDate = :shiftDate AND " +
-           "s.status <> com.unicare.domain.enums.ShiftStatus.DA_HUY AND " +
+           "s.status <> com.unicare.domain.enums.ShiftStatus.ENDED AND " +
            "s.startTime < :endTime AND s.endTime > :startTime")
     boolean existsOverlappingShiftExcludingId(
             @Param("excludeId") Long excludeId,
-            @Param("doctorId") Long doctorId,
+            @Param("staffId") Long staffId,
             @Param("shiftDate") LocalDate shiftDate,
             @Param("startTime") LocalTime startTime,
             @Param("endTime") LocalTime endTime
@@ -52,7 +52,7 @@ public interface ShiftRepository extends JpaRepository<Shift, Long> {
     @Query("SELECT COUNT(s) > 0 FROM Shift s WHERE " +
            "s.room IS NOT NULL AND LOWER(s.room) = LOWER(:room) AND " +
            "s.shiftDate = :shiftDate AND " +
-           "s.status <> com.unicare.domain.enums.ShiftStatus.DA_HUY AND " +
+           "s.status <> com.unicare.domain.enums.ShiftStatus.ENDED AND " +
            "s.startTime < :endTime AND s.endTime > :startTime")
     boolean existsOverlappingRoom(
             @Param("room") String room,
@@ -65,7 +65,7 @@ public interface ShiftRepository extends JpaRepository<Shift, Long> {
            "s.id <> :excludeId AND " +
            "s.room IS NOT NULL AND LOWER(s.room) = LOWER(:room) AND " +
            "s.shiftDate = :shiftDate AND " +
-           "s.status <> com.unicare.domain.enums.ShiftStatus.DA_HUY AND " +
+           "s.status <> com.unicare.domain.enums.ShiftStatus.ENDED AND " +
            "s.startTime < :endTime AND s.endTime > :startTime")
     boolean existsOverlappingRoomExcludingId(
             @Param("excludeId") Long excludeId,

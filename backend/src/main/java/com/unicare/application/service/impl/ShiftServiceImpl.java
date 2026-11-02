@@ -10,12 +10,14 @@ import com.unicare.application.service.ShiftService;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
+import com.unicare.domain.entity.MedicalStaff;
 import com.unicare.domain.entity.Shift;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.Role;
 import com.unicare.domain.enums.ServiceType;
 import com.unicare.domain.enums.ShiftStatus;
 import com.unicare.domain.enums.UserStatus;
+import com.unicare.domain.repository.MedicalStaffRepository;
 import com.unicare.domain.repository.ShiftRepository;
 import com.unicare.domain.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -32,10 +34,16 @@ public class ShiftServiceImpl implements ShiftService {
 
     private final ShiftRepository shiftRepository;
     private final UserRepository userRepository;
+    private final MedicalStaffRepository medicalStaffRepository;
 
-    public ShiftServiceImpl(ShiftRepository shiftRepository, UserRepository userRepository) {
+    public ShiftServiceImpl(
+            ShiftRepository shiftRepository,
+            UserRepository userRepository,
+            MedicalStaffRepository medicalStaffRepository
+    ) {
         this.shiftRepository = shiftRepository;
         this.userRepository = userRepository;
+        this.medicalStaffRepository = medicalStaffRepository;
     }
 
     @Override
@@ -62,8 +70,8 @@ public class ShiftServiceImpl implements ShiftService {
                 .filter(s -> date == null || date.equals(s.getShiftDate()))
                 .filter(s -> fromDate == null || !s.getShiftDate().isBefore(fromDate))
                 .filter(s -> toDate == null || !s.getShiftDate().isAfter(toDate))
-                .filter(s -> doctorId == null || (s.getDoctor() != null && doctorId.equals(s.getDoctor().getId())))
-                .filter(s -> serviceType == null || serviceType == s.getServiceType())
+                .filter(s -> doctorId == null || (s.getStaff() != null && doctorId.equals(s.getStaff().getId())))
+                .filter(s -> serviceType == null || serviceType == s.getShiftType())
                 .filter(s -> status == null || status == s.getStatus())
                 .filter(s -> cleanRoom == null || (s.getRoom() != null && s.getRoom().toLowerCase(Locale.ROOT).contains(cleanRoom)))
                 .map(ShiftResponse::fromEntity)
@@ -92,17 +100,18 @@ public class ShiftServiceImpl implements ShiftService {
     public ShiftResponse createShift(ShiftRequest request, String currentUsername) {
         validateTimeRange(request.getStartTime(), request.getEndTime());
 
-        User doctor = resolveAndValidateDoctor(request.getDoctorId(), currentUsername, null);
+        MedicalStaff staff = resolveAndValidateStaff(request.getDoctorId(), currentUsername, null);
 
         boolean overlapping = shiftRepository.existsOverlappingShift(
-                doctor.getId(),
+                staff.getId(),
                 request.getShiftDate(),
                 request.getStartTime(),
                 request.getEndTime()
         );
         if (overlapping) {
+            String doctorName = staff.getUser() != null ? staff.getUser().getFullName() : "này";
             throw new DuplicateResourceException(
-                    "Bác sĩ " + doctor.getFullName() + " đã có ca khám trùng khung giờ trong ngày " + request.getShiftDate() + "."
+                    "Bác sĩ " + doctorName + " đã có ca khám trùng khung giờ trong ngày " + request.getShiftDate() + "."
             );
         }
 
@@ -125,7 +134,7 @@ public class ShiftServiceImpl implements ShiftService {
         }
 
         Shift shift = new Shift(
-                doctor,
+                staff,
                 request.getShiftDate(),
                 request.getStartTime(),
                 request.getEndTime(),
@@ -146,9 +155,9 @@ public class ShiftServiceImpl implements ShiftService {
 
         validateTimeRange(request.getStartTime(), request.getEndTime());
 
-        User doctor = resolveAndValidateDoctor(request.getDoctorId(), currentUsername, shift.getDoctor());
+        MedicalStaff staff = resolveAndValidateStaff(request.getDoctorId(), currentUsername, shift.getStaff());
 
-        int bookedQty = shift.getBookedQuantity() != null ? shift.getBookedQuantity() : 0;
+        int bookedQty = shift.getBookedSlots() != null ? shift.getBookedSlots() : 0;
 
         // Ràng buộc 1: Không cho phép giảm số lượng tối đa thấp hơn số lịch đã đặt
         if (request.getMaxQuantity() < bookedQty) {
@@ -158,18 +167,18 @@ public class ShiftServiceImpl implements ShiftService {
             );
         }
 
-        // Ràng buộc 2: Nếu ca đã có lịch hẹn thì không cho phép chuyển sang Đã hủy trước khi hủy/dời lịch
-        if (request.getStatus() == ShiftStatus.DA_HUY && bookedQty > 0) {
+        // Ràng buộc 2: Nếu ca đã có lịch hẹn thì không cho phép chuyển sang Đã kết thúc / Hủy trước khi hủy/dời lịch
+        if (request.getStatus() == ShiftStatus.ENDED && bookedQty > 0) {
             throw new BadRequestException(
                     "Ca khám đã có " + bookedQty + " lịch hẹn. Vui lòng hủy hoặc dời tất cả lịch hẹn trước khi hủy ca khám."
             );
         }
 
         ShiftStatus nextStatus;
-        if (request.getStatus() == ShiftStatus.DA_HUY) {
-            nextStatus = ShiftStatus.DA_HUY;
+        if (request.getStatus() == ShiftStatus.ENDED) {
+            nextStatus = ShiftStatus.ENDED;
         } else {
-            nextStatus = bookedQty >= request.getMaxQuantity() ? ShiftStatus.DA_DAY : ShiftStatus.CON_TRONG;
+            nextStatus = bookedQty >= request.getMaxQuantity() ? ShiftStatus.FULL : ShiftStatus.OPEN;
         }
 
         String cleanRoom = (request.getRoom() != null && !request.getRoom().trim().isEmpty())
@@ -177,17 +186,18 @@ public class ShiftServiceImpl implements ShiftService {
                 : null;
 
         // Kiểm tra trùng khung giờ của Bác sĩ và Phòng khám trong ngày (bỏ qua nếu ca đang được hủy)
-        if (nextStatus != ShiftStatus.DA_HUY) {
+        if (nextStatus != ShiftStatus.ENDED) {
             boolean overlapping = shiftRepository.existsOverlappingShiftExcludingId(
                     id,
-                    doctor.getId(),
+                    staff.getId(),
                     request.getShiftDate(),
                     request.getStartTime(),
                     request.getEndTime()
             );
             if (overlapping) {
+                String doctorName = staff.getUser() != null ? staff.getUser().getFullName() : "này";
                 throw new DuplicateResourceException(
-                        "Bác sĩ " + doctor.getFullName() + " đã có ca khám trùng khung giờ trong ngày " + request.getShiftDate() + "."
+                        "Bác sĩ " + doctorName + " đã có ca khám trùng khung giờ trong ngày " + request.getShiftDate() + "."
                 );
             }
 
@@ -207,13 +217,13 @@ public class ShiftServiceImpl implements ShiftService {
             }
         }
 
-        shift.setDoctor(doctor);
+        shift.setStaff(staff);
         shift.setShiftDate(request.getShiftDate());
         shift.setStartTime(request.getStartTime());
         shift.setEndTime(request.getEndTime());
-        shift.setServiceType(request.getServiceType());
+        shift.setShiftType(request.getServiceType());
         shift.setRoom(cleanRoom);
-        shift.setMaxQuantity(request.getMaxQuantity());
+        shift.setMaxSlots(request.getMaxQuantity());
         shift.setStatus(nextStatus);
 
         Shift updatedShift = shiftRepository.save(shift);
@@ -226,7 +236,7 @@ public class ShiftServiceImpl implements ShiftService {
         Shift shift = shiftRepository.findByIdWithDoctor(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ca khám với mã ID: " + id));
 
-        int bookedQty = shift.getBookedQuantity() != null ? shift.getBookedQuantity() : 0;
+        int bookedQty = shift.getBookedSlots() != null ? shift.getBookedSlots() : 0;
         if (bookedQty > 0) {
             throw new BadRequestException(
                     "Ca khám đã có " + bookedQty + " lịch hẹn. Vui lòng hủy hoặc dời tất cả lịch hẹn trước khi xóa ca khám."
@@ -242,15 +252,26 @@ public class ShiftServiceImpl implements ShiftService {
         }
     }
 
-    private User resolveAndValidateDoctor(Long requestedDoctorId, String currentUsername, User fallbackDoctor) {
+    private MedicalStaff resolveAndValidateStaff(Long requestedDoctorId, String currentUsername, MedicalStaff fallbackStaff) {
+        if (requestedDoctorId == null && fallbackStaff != null) {
+            User fallbackDoctor = fallbackStaff.getUser();
+            if (fallbackDoctor != null) {
+                if (fallbackDoctor.getRole() != Role.NHAN_VIEN_Y_TE) {
+                    throw new BadRequestException("Người dùng được chọn không phải là Bác sĩ / Nhân viên y tế.");
+                }
+                if (fallbackDoctor.getStatus() != UserStatus.ACTIVE) {
+                    throw new BadRequestException("Tài khoản Bác sĩ / Nhân viên y tế đang bị khóa, không thể phân công ca khám.");
+                }
+            }
+            return fallbackStaff;
+        }
+
         User doctor;
         if (requestedDoctorId != null) {
             doctor = userRepository.findById(requestedDoctorId)
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Không tìm thấy bác sĩ / nhân viên y tế với mã ID: " + requestedDoctorId
                     ));
-        } else if (fallbackDoctor != null) {
-            doctor = fallbackDoctor;
         } else if (currentUsername != null && !currentUsername.isBlank()) {
             User currentUser = userRepository.findByUsername(currentUsername.trim())
                     .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản đang đăng nhập."));
@@ -268,6 +289,17 @@ public class ShiftServiceImpl implements ShiftService {
         if (doctor.getStatus() != UserStatus.ACTIVE) {
             throw new BadRequestException("Tài khoản Bác sĩ / Nhân viên y tế đang bị khóa, không thể phân công ca khám.");
         }
-        return doctor;
+
+        return medicalStaffRepository.findById(doctor.getId())
+                .orElseGet(() -> {
+                    MedicalStaff newStaff = MedicalStaff.builder()
+                            .user(doctor)
+                            .id(doctor.getId())
+                            .staffCode("BS" + String.format("%04d", doctor.getId()))
+                            .title("Bác sĩ")
+                            .specialty("Đa khoa")
+                            .build();
+                    return medicalStaffRepository.save(newStaff);
+                });
     }
 }
