@@ -2,10 +2,13 @@ import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import { User, KeyRound, ShieldCheck } from "lucide-react";
+import StudentHealthProfile from "./StudentHealthProfile";
 
 const Profile = () => {
   const { user } = useAuth();
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+
+  if (user?.role === "SINH_VIEN") return <StudentHealthProfile key={user.username} />;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">

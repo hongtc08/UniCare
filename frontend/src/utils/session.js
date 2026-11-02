@@ -32,7 +32,9 @@ export function sessionFromToken(token) {
       !Object.hasOwn(ROLE_LABELS, claims.role)
     )
       return null;
+    const parsedUserId = Number(claims.userId);
     return {
+      userId: Number.isFinite(parsedUserId) ? parsedUserId : undefined,
       username: claims.sub,
       fullName: claims.fullName,
       role: claims.role,
