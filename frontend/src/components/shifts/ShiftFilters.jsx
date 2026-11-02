@@ -1,11 +1,10 @@
-import React from "react";
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
   ChevronRight, 
   UserRound, 
   Stethoscope, 
-  Building2,
+  Building2, 
   RotateCcw,
   UserCheck
 } from "lucide-react";

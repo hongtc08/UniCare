@@ -1,16 +1,14 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import { 
   X, 
   Calendar, 
   Clock, 
   User, 
-  Stethoscope, 
   Building2, 
-  Users, 
   AlertTriangle, 
   Trash2, 
-  Edit3,
-  Loader2
+  Edit3, 
+  Loader2 
 } from "lucide-react";
 import { CLINIC_ROOMS, SHIFT_SLOTS, SERVICE_CONFIG } from "./mockShiftData";
 
@@ -46,14 +44,29 @@ export default function ShiftDetailModal({
 
   const initialDoctorId = isDoctor ? currentUserId : doctors[0]?.id || currentUserId || "";
 
-  // Form State
-  const [formData, setFormData] = useState({
-    date: selectedDayForCreate || new Date().toISOString().split("T")[0],
-    shiftSlot: selectedSlotForCreate || "MORNING",
-    doctorId: initialDoctorId,
-    serviceType: "KHAM_DA_KHOA",
-    room: "P.101 - Phòng y tế",
-    maxCapacity: 10,
+  // Form State: khởi tạo trực tiếp từ props mà không cần setState đồng bộ trong useEffect
+  const [formData, setFormData] = useState(() => {
+    if (mode === "CREATE" || !shift) {
+      const defaultService = "KHAM_DA_KHOA";
+      return {
+        date: selectedDayForCreate || new Date().toISOString().split("T")[0],
+        shiftSlot: selectedSlotForCreate || "MORNING",
+        doctorId: initialDoctorId,
+        serviceType: defaultService,
+        room: SERVICE_CONFIG[defaultService].defaultRoom,
+        maxCapacity: 10,
+      };
+    }
+    return {
+      date: shift.date,
+      shiftSlot:
+        shift.shiftSlot ||
+        (parseInt(shift.startTime?.split(":")[0], 10) < 12 ? "MORNING" : "AFTERNOON"),
+      doctorId: isDoctor ? currentUserId : shift.doctorId,
+      serviceType: shift.serviceType,
+      room: shift.room || "P.101 - Phòng y tế",
+      maxCapacity: shift.maxCapacity,
+    };
   });
 
   const [formError, setFormError] = useState("");
@@ -61,27 +74,28 @@ export default function ShiftDetailModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(mode === "CREATE" || mode === "EDIT");
 
-  // Đồng bộ form khi mở modal hoặc thay đổi ca khám
-  useEffect(() => {
-    if (!isOpen) {
-      setFormError("");
-      setIsSubmitting(false);
-      setIsDeleting(false);
-      return;
-    }
+  // Track sự thay đổi của modal hoặc shift qua key hoặc id thay vì setState cascading trong useEffect
+  const [prevTrackKey, setPrevTrackKey] = useState(`${mode}-${shift?.id}-${isOpen}`);
+  const currentTrackKey = `${mode}-${shift?.id}-${isOpen}`;
 
-    if (mode === "CREATE") {
+  if (prevTrackKey !== currentTrackKey) {
+    setPrevTrackKey(currentTrackKey);
+    setFormError("");
+    setIsSubmitting(false);
+    setIsDeleting(false);
+
+    if (mode === "CREATE" || !shift) {
       setIsEditing(true);
       const defaultService = "KHAM_DA_KHOA";
       setFormData({
         date: selectedDayForCreate || new Date().toISOString().split("T")[0],
         shiftSlot: selectedSlotForCreate || "MORNING",
-        doctorId: isDoctor ? currentUserId : doctors[0]?.id || currentUserId || "",
+        doctorId: initialDoctorId,
         serviceType: defaultService,
         room: SERVICE_CONFIG[defaultService].defaultRoom,
         maxCapacity: 10,
       });
-    } else if (shift) {
+    } else {
       setIsEditing(mode === "EDIT");
       setFormData({
         date: shift.date,
@@ -94,7 +108,7 @@ export default function ShiftDetailModal({
         maxCapacity: shift.maxCapacity,
       });
     }
-  }, [isOpen, mode, shift, selectedDayForCreate, selectedSlotForCreate, doctors, isDoctor, currentUserId]);
+  }
 
   if (!isOpen) return null;
 
@@ -113,7 +127,6 @@ export default function ShiftDetailModal({
     e.preventDefault();
     setFormError("");
 
-    // Validate nhanh ở FE
     if (formData.maxCapacity <= 0) {
       setFormError("Số lượng tối đa phải lớn hơn 0");
       return;
@@ -127,7 +140,6 @@ export default function ShiftDetailModal({
     const doc = doctors.find((d) => String(d.id) === String(formData.doctorId));
     const resolvedDoctorName = isDoctor ? currentUserName : (doc ? doc.name : "Bác sĩ");
 
-    // Chuẩn hóa Payload gửi lên BE
     const payload = {
       doctorId: formData.doctorId ? Number(formData.doctorId) || formData.doctorId : undefined,
       shiftDate: formData.date,
@@ -136,7 +148,6 @@ export default function ShiftDetailModal({
       serviceType: formData.serviceType,
       room: formData.room,
       maxQuantity: Number(formData.maxCapacity),
-      // Giữ thêm fields cho UI FE map mượt mà
       doctorName: resolvedDoctorName,
       shiftSlot: formData.shiftSlot,
     };

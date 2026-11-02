@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Plus, RefreshCw, Loader2 } from "lucide-react";
 import ShiftFilters from "./ShiftFilters";
 import ShiftCalendar from "./ShiftCalendar";
@@ -140,7 +140,6 @@ export default function ShiftManagementView({
         toDate: weekRange.toDate,
       };
 
-      // Phân quyền: DOCTOR chỉ lấy lịch của mình
       if (isDoctor && currentUserId) {
         params.doctorId = currentUserId;
       } else if (isAdmin && selectedDoctor !== "ALL") {
@@ -151,7 +150,6 @@ export default function ShiftManagementView({
         params.serviceType = selectedService;
       }
 
-      // Gọi service
       const res = await shiftService.getShifts(params);
       const rawList = res?.data || res || [];
 
@@ -161,24 +159,35 @@ export default function ShiftManagementView({
       }
     } catch (err) {
       console.warn("Backend API chưa khả dụng hoặc trả về lỗi, duy trì dữ liệu fallback:", err);
-      // Nếu BE offline trong lúc dev, giữ dữ liệu hiện tại để không gián đoạn thao tác
     } finally {
       setIsLoading(false);
     }
   }, [weekRange.fromDate, weekRange.toDate, isDoctor, currentUserId, isAdmin, selectedDoctor, selectedService]);
 
+  const fetchShiftsRef = useRef(fetchShifts);
   useEffect(() => {
-    fetchShifts();
+    fetchShiftsRef.current = fetchShifts;
   }, [fetchShifts]);
+
+  useEffect(() => {
+    let ignore = false;
+    const load = async () => {
+      if (!ignore) {
+        await fetchShiftsRef.current();
+      }
+    };
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedDate, selectedDoctor, selectedService]);
 
   // Bộ lọc phụ ở Client (như lọc theo Phòng khám)
   const filteredShifts = useMemo(() => {
     return shifts.filter((shift) => {
-      // Phân quyền: Bác sĩ chỉ xem lịch của mình
       if (isDoctor) {
         if (String(shift.doctorId) !== String(currentUserId)) return false;
       }
-      // Lọc theo Phòng khám
       if (selectedRoom !== "ALL") {
         if (shift.room !== selectedRoom) return false;
       }

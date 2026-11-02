@@ -1,4 +1,3 @@
-import React from "react";
 import ShiftManagementView from "../components/shifts/ShiftManagementView";
 import { useAuth } from "../hooks/useAuth";
 

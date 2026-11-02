@@ -1,4 +1,4 @@
-import { Activity, BookOpen, Calendar, Clock, Heart, LayoutDashboard, ClipboardList, TriangleAlert, ChartColumn, FileChartColumn, Bell, Settings, Users, FolderTree, CalendarRange } from "lucide-react";
+import { Activity, BookOpen, Clock, Heart, LayoutDashboard, ClipboardList, TriangleAlert, ChartColumn, FileChartColumn, Bell, Settings, Users, FolderTree, CalendarRange } from "lucide-react";
 
 export const navigation = {
   SINH_VIEN: [
