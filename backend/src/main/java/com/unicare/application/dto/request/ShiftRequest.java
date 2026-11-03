@@ -18,7 +18,7 @@ import java.time.LocalTime;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ShiftRequest {
 
-    @JsonAlias({"nhanVienYTeId", "bacSiId", "doctor_id"})
+    @JsonAlias({"nhanVienYTeId", "bacSiId", "doctor_id", "staff_id", "staffId"})
     private Long doctorId;
 
     @NotNull(message = "Ngày khám không được để trống")
@@ -34,7 +34,7 @@ public class ShiftRequest {
     private LocalTime endTime;
 
     @NotNull(message = "Loại dịch vụ không được để trống (chỉ nhận KHAM_DA_KHOA hoặc TU_VAN_TAM_LY)")
-    @JsonAlias({"loaiCaKham", "loaiDichVu", "service_type"})
+    @JsonAlias({"loaiCaKham", "loaiDichVu", "service_type", "shift_type", "shiftType", "serviceType"})
     private ServiceType serviceType;
 
     @Size(max = 100, message = "Phòng khám không được vượt quá 100 ký tự")
@@ -44,10 +44,10 @@ public class ShiftRequest {
     @NotNull(message = "Số lượng tối đa không được để trống")
     @Min(value = 1, message = "Số lượng tối đa phải từ 1 sinh viên trở lên")
     @Max(value = 500, message = "Số lượng tối đa không được vượt quá 500")
-    @JsonAlias({"soLuongToiDa", "max_quantity"})
+    @JsonAlias({"soLuongToiDa", "max_quantity", "maxQuantity", "max_slots", "maxSlots", "maxCapacity"})
     private Integer maxQuantity;
 
-    @JsonAlias({"trangThaiCa"})
+    @JsonAlias({"trangThaiCa", "status"})
     private ShiftStatus status;
 
     public ShiftRequest() {
@@ -77,6 +77,14 @@ public class ShiftRequest {
 
     public void setDoctorId(Long doctorId) {
         this.doctorId = doctorId;
+    }
+
+    public Long getStaffId() {
+        return doctorId;
+    }
+
+    public void setStaffId(Long staffId) {
+        this.doctorId = staffId;
     }
 
     public LocalDate getShiftDate() {
@@ -111,6 +119,14 @@ public class ShiftRequest {
         this.serviceType = serviceType;
     }
 
+    public ServiceType getShiftType() {
+        return serviceType;
+    }
+
+    public void setShiftType(ServiceType shiftType) {
+        this.serviceType = shiftType;
+    }
+
     public String getRoom() {
         return room;
     }
@@ -125,6 +141,14 @@ public class ShiftRequest {
 
     public void setMaxQuantity(Integer maxQuantity) {
         this.maxQuantity = maxQuantity;
+    }
+
+    public Integer getMaxSlots() {
+        return maxQuantity;
+    }
+
+    public void setMaxSlots(Integer maxSlots) {
+        this.maxQuantity = maxSlots;
     }
 
     public ShiftStatus getStatus() {
