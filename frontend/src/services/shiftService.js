@@ -13,6 +13,7 @@ export const shiftService = {
    * @param {number|string} [filters.doctorId] ID của Bác sĩ
    * @param {string} [filters.serviceType] KHAM_DA_KHOA | TU_VAN_TAM_LY
    * @param {string} [filters.status] DANG_MO | DA_DAY | DA_HUY
+   * @param {string} [filters.room] Tên phòng khám (BE3 đã bổ sung)
    */
   getShifts: (filters = {}) => {
     const params = {};
@@ -22,8 +23,17 @@ export const shiftService = {
     if (filters.doctorId && filters.doctorId !== "ALL") params.doctorId = filters.doctorId;
     if (filters.serviceType && filters.serviceType !== "ALL") params.serviceType = filters.serviceType;
     if (filters.status && filters.status !== "ALL") params.status = filters.status;
+    if (filters.room && filters.room !== "ALL") params.room = filters.room;
 
     return axiosClient.get("/shifts", { params });
+  },
+
+  /**
+   * Lấy danh sách Bác sĩ / Nhân viên y tế hoạt động cho Dropdown
+   * GET /api/shifts/doctors
+   */
+  getDoctors: () => {
+    return axiosClient.get("/shifts/doctors");
   },
 
   /**
@@ -68,4 +78,3 @@ export const shiftService = {
 };
 
 export default shiftService;
-

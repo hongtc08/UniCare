@@ -42,9 +42,20 @@ export default function ShiftDetailModal({
   const isAdmin = userRole === "ADMIN" || userRole === "BAN_QUAN_LY";
   const isDoctor = !isAdmin;
 
-  const initialDoctorId = isDoctor ? currentUserId : doctors[0]?.id || currentUserId || "";
+  // Lấy bác sĩ ban đầu:
+  // Nếu là Doctor -> currentUserId
+  // Nếu là Admin -> lấy bác sĩ đầu tiên có id hợp lệ (ưu tiên id dạng số từ BE)
+  const getFallbackDoctorId = () => {
+    if (isDoctor) return currentUserId || "";
+    if (doctors.length > 0) {
+      return doctors[0].id;
+    }
+    return currentUserId || "";
+  };
 
-  // Form State: khởi tạo trực tiếp từ props mà không cần setState đồng bộ trong useEffect
+  const initialDoctorId = getFallbackDoctorId();
+
+  // Form State: khởi tạo trực tiếp từ props
   const [formData, setFormData] = useState(() => {
     if (mode === "CREATE" || !shift) {
       const defaultService = "KHAM_DA_KHOA";
@@ -74,9 +85,9 @@ export default function ShiftDetailModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(mode === "CREATE" || mode === "EDIT");
 
-  // Track sự thay đổi của modal hoặc shift qua key hoặc id thay vì setState cascading trong useEffect
-  const [prevTrackKey, setPrevTrackKey] = useState(`${mode}-${shift?.id}-${isOpen}`);
-  const currentTrackKey = `${mode}-${shift?.id}-${isOpen}`;
+  // Track sự thay đổi của modal hoặc shift qua key
+  const [prevTrackKey, setPrevTrackKey] = useState(`${mode}-${shift?.id}-${isOpen}-${doctors.length}`);
+  const currentTrackKey = `${mode}-${shift?.id}-${isOpen}-${doctors.length}`;
 
   if (prevTrackKey !== currentTrackKey) {
     setPrevTrackKey(currentTrackKey);
@@ -90,7 +101,7 @@ export default function ShiftDetailModal({
       setFormData({
         date: selectedDayForCreate || new Date().toISOString().split("T")[0],
         shiftSlot: selectedSlotForCreate || "MORNING",
-        doctorId: initialDoctorId,
+        doctorId: getFallbackDoctorId(),
         serviceType: defaultService,
         room: SERVICE_CONFIG[defaultService].defaultRoom,
         maxCapacity: 10,
@@ -136,12 +147,20 @@ export default function ShiftDetailModal({
       return;
     }
 
+    // Kiểm tra Bác sĩ phụ trách:
+    // Nếu ID bác sĩ là string mock dạng 'doc-1' (chưa phải số nguyên từ Database), chặn ngay ở FE để báo cho người dùng
+    const numericDoctorId = Number(formData.doctorId);
+    if (!numericDoctorId || isNaN(numericDoctorId)) {
+      setFormError("Vui lòng chọn một Bác sĩ hợp lệ từ hệ thống (ID bác sĩ phải là tài khoản có trong Database).");
+      return;
+    }
+
     const slotInfo = SHIFT_SLOTS[formData.shiftSlot];
     const doc = doctors.find((d) => String(d.id) === String(formData.doctorId));
     const resolvedDoctorName = isDoctor ? currentUserName : (doc ? doc.name : "Bác sĩ");
 
     const payload = {
-      doctorId: formData.doctorId ? Number(formData.doctorId) || formData.doctorId : undefined,
+      doctorId: numericDoctorId,
       shiftDate: formData.date,
       startTime: slotInfo.startTime,
       endTime: slotInfo.endTime,
@@ -449,7 +468,7 @@ export default function ShiftDetailModal({
                 >
                   {doctors.map((doc) => (
                     <option key={doc.id} value={doc.id}>
-                      {doc.name} - {doc.specialty === "KHAM_DA_KHOA" ? "Khoa Đa Khoa" : "Tâm Lý"}
+                      {doc.name || doc.fullName} {doc.specialty ? `- ${doc.specialty === "KHAM_DA_KHOA" ? "Khoa Đa Khoa" : "Tâm Lý"}` : ""}
                     </option>
                   ))}
                 </select>
