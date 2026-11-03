@@ -129,7 +129,7 @@ export default function ShiftCalendar({
           {/* 1. HÀNG HEADER NGÀY                                           */}
           {/* ============================================================== */}
           {/* Cột Khung Giờ Sticky ở Header */}
-          <div className="sticky left-0 z-30 bg-slate-100 border-r border-b border-slate-200 p-3 text-center flex flex-col items-center justify-center shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)]">
+          <div className="sticky left-0 z-20 bg-slate-100 border-r border-b border-slate-200 p-3 text-center flex flex-col items-center justify-center shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)]">
             <span className="text-xs uppercase tracking-wider font-bold text-slate-500 whitespace-nowrap">
               Khung giờ
             </span>
@@ -167,7 +167,7 @@ export default function ShiftCalendar({
           {/* 2. KHỐI 1: CA SÁNG (08:00 - 11:00)                             */}
           {/* ============================================================== */}
           {/* Cột Khung Giờ Sáng Sticky */}
-          <div className="sticky left-0 z-20 bg-slate-50/95 border-r border-b border-slate-200 p-3.5 flex flex-col items-center justify-center text-center shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)]">
+          <div className="sticky left-0 z-10 bg-slate-50/95 border-r border-b border-slate-200 p-3.5 flex flex-col items-center justify-center text-center shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)]">
             <span className="text-sm font-semibold text-slate-800">08:00</span>
             <span className="text-xs text-slate-400 my-0.5">đến</span>
             <span className="text-sm font-semibold text-slate-800">11:00</span>
@@ -230,7 +230,7 @@ export default function ShiftCalendar({
           {/* 3. KHỐI 2: KHOẢNG NGHỈ TRƯA (11:00 - 13:00)                    */}
           {/* ============================================================== */}
           {/* Cột Khung Giờ Trưa Sticky */}
-          <div className="sticky left-0 z-20 bg-slate-100 border-r border-b border-dashed border-slate-200 p-2.5 flex flex-col items-center justify-center text-center shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)]">
+          <div className="sticky left-0 z-10 bg-slate-100 border-r border-b border-dashed border-slate-200 p-2.5 flex flex-col items-center justify-center text-center shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)]">
             <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
               11:00 - 13:00
             </span>
@@ -246,7 +246,7 @@ export default function ShiftCalendar({
           {/* 4. KHỐI 3: CA CHIỀU (13:00 - 17:00)                            */}
           {/* ============================================================== */}
           {/* Cột Khung Giờ Chiều Sticky */}
-          <div className="sticky left-0 z-20 bg-slate-50/95 border-r border-slate-200 p-3.5 flex flex-col items-center justify-center text-center shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)]">
+          <div className="sticky left-0 z-10 bg-slate-50/95 border-r border-slate-200 p-3.5 flex flex-col items-center justify-center text-center shadow-[4px_0_8px_-2px_rgba(0,0,0,0.06)]">
             <span className="text-sm font-semibold text-slate-800">13:00</span>
             <span className="text-xs text-slate-400 my-0.5">đến</span>
             <span className="text-sm font-semibold text-slate-800">17:00</span>
