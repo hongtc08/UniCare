@@ -5,7 +5,6 @@ import ShiftCalendar from "./ShiftCalendar";
 import ShiftDetailModal from "./ShiftDetailModal";
 import Toast from "../common/Toast";
 import shiftService from "../../services/shiftService";
-import { MOCK_DOCTORS, INITIAL_MOCK_SHIFTS } from "./mockShiftData";
 
 function getMonday(date) {
   const d = new Date(date);
@@ -70,11 +69,11 @@ export default function ShiftManagementView({
   const [selectedService, setSelectedService] = useState("ALL");
   const [selectedRoom, setSelectedRoom] = useState("ALL");
 
-  // State Danh sách Bác sĩ từ BE (có fallback sang MOCK_DOCTORS)
-  const [doctorList, setDoctorList] = useState(MOCK_DOCTORS);
+  // State Danh sách Bác sĩ từ BE
+  const [doctorList, setDoctorList] = useState([]);
 
   // State Danh sách ca khám & Trạng thái tải
-  const [shifts, setShifts] = useState(INITIAL_MOCK_SHIFTS);
+  const [shifts, setShifts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState(null);
 

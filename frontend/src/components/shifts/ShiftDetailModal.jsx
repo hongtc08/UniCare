@@ -10,7 +10,7 @@ import {
   Edit3, 
   Loader2 
 } from "lucide-react";
-import { CLINIC_ROOMS, SHIFT_SLOTS, SERVICE_CONFIG } from "./mockShiftData";
+import { CLINIC_ROOMS, SHIFT_SLOTS, SERVICE_CONFIG } from "./shiftConfig";
 
 function formatDateDMY(dateString) {
   if (!dateString) return "";
@@ -429,7 +429,7 @@ export default function ShiftDetailModal({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Phòng khám <span className="text-slate-400 font-normal">(Cố định theo dịch vụ)</span>
+                  Phòng khám
                 </label>
                 <div className="relative">
                   <input
