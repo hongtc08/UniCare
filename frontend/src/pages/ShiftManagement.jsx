@@ -1,5 +1,6 @@
 import ShiftManagementView from "../components/shifts/ShiftManagementView";
 import { useAuth } from "../hooks/useAuth";
+import { readSession } from "../utils/session";
 
 /**
  * Trang Quản lý Lịch trực & Mở ca khám tuần
@@ -19,8 +20,16 @@ export default function ShiftManagement() {
       ? "DOCTOR"
       : "ADMIN";
 
-  // Lấy userId/doctorId từ user profile đang đăng nhập
-  const currentUserId = user?.id || user?.userId || user?.doctorId || "doc-1";
+  // Lấy userId/doctorId từ user profile hoặc decode từ JWT token (readSession)
+  let numericUserId = user?.id || user?.userId || user?.doctorId;
+  if (!numericUserId || typeof numericUserId === "string" && !/^\d+$/.test(numericUserId)) {
+    const session = readSession();
+    if (session?.userId) {
+      numericUserId = session.userId;
+    }
+  }
+
+  const currentUserId = numericUserId || null;
   const currentUserName = user?.fullName || user?.name || user?.username || "Bác sĩ";
 
   return (

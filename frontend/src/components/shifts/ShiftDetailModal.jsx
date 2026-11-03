@@ -160,13 +160,17 @@ export default function ShiftDetailModal({
     const resolvedDoctorName = isDoctor ? currentUserName : (doc ? doc.name : "Bác sĩ");
 
     const payload = {
+      staffId: numericDoctorId,
       doctorId: numericDoctorId,
       shiftDate: formData.date,
       startTime: slotInfo.startTime,
       endTime: slotInfo.endTime,
+      shiftType: formData.serviceType,
       serviceType: formData.serviceType,
       room: formData.room,
+      maxSlots: Number(formData.maxCapacity),
       maxQuantity: Number(formData.maxCapacity),
+      status: shift?.status || "OPEN",
       doctorName: resolvedDoctorName,
       shiftSlot: formData.shiftSlot,
     };

@@ -36,13 +36,18 @@ function mapBackendShiftToUI(shift) {
     startTime: startTime,
     endTime: endTime,
     shiftSlot: shiftSlot,
-    doctorId: shift.doctorId,
+    staffId: shift.staffId ?? shift.doctorId,
+    doctorId: shift.doctorId ?? shift.staffId,
     doctorName: shift.doctorName || "Bác sĩ",
-    serviceType: shift.serviceType,
+    staffCode: shift.staffCode || "",
+    shiftType: shift.shiftType ?? shift.serviceType,
+    serviceType: shift.serviceType ?? shift.shiftType,
     room: shift.room || "P.101 - Phòng y tế",
-    bookedCount: shift.bookedQuantity ?? shift.bookedCount ?? 0,
-    maxCapacity: shift.maxQuantity ?? shift.maxCapacity ?? 10,
-    status: shift.status || "DANG_MO",
+    bookedSlots: shift.bookedSlots ?? shift.bookedQuantity ?? shift.bookedCount ?? 0,
+    bookedCount: shift.bookedSlots ?? shift.bookedQuantity ?? shift.bookedCount ?? 0,
+    maxSlots: shift.maxSlots ?? shift.maxQuantity ?? shift.maxCapacity ?? 10,
+    maxCapacity: shift.maxSlots ?? shift.maxQuantity ?? shift.maxCapacity ?? 10,
+    status: shift.status || "OPEN",
   };
 }
 
@@ -170,10 +175,10 @@ export default function ShiftManagementView({
         toDate: weekRange.toDate,
       };
 
-      if (isDoctor && currentUserId) {
-        params.doctorId = currentUserId;
-      } else if (isAdmin && selectedDoctor !== "ALL") {
-        params.doctorId = selectedDoctor;
+      if (isDoctor && currentUserId && !isNaN(Number(currentUserId))) {
+        params.doctorId = Number(currentUserId);
+      } else if (isAdmin && selectedDoctor !== "ALL" && !isNaN(Number(selectedDoctor))) {
+        params.doctorId = Number(selectedDoctor);
       }
 
       if (selectedService !== "ALL") {
@@ -220,8 +225,10 @@ export default function ShiftManagementView({
   // Bộ lọc phụ ở Client (đảm bảo tính nhất quán nếu BE offline)
   const filteredShifts = useMemo(() => {
     return shifts.filter((shift) => {
-      if (isDoctor) {
-        if (String(shift.doctorId) !== String(currentUserId)) return false;
+      if (isDoctor && currentUserId && !isNaN(Number(currentUserId))) {
+        if (String(shift.doctorId) !== String(currentUserId) && String(shift.staffId) !== String(currentUserId)) {
+          return false;
+        }
       }
       if (selectedRoom !== "ALL") {
         if (shift.room !== selectedRoom) return false;
