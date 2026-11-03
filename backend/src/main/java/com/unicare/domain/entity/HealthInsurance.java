@@ -36,5 +36,17 @@ public class HealthInsurance {
 
     @Column(name = "initial_hospital", nullable = false, length = 150)
     private String initialHospital;
-}
 
+    @Column(name = "issue_at", length = 150)
+    private String issueAt;
+
+    public HealthInsurance(String cardNumber, Student student, LocalDate effectiveDate, LocalDate expirationDate,
+            String initialHospital, String issueAt) {
+        this.cardNumber = cardNumber;
+        this.student = student;
+        this.effectiveDate = effectiveDate;
+        this.expirationDate = expirationDate;
+        this.initialHospital = initialHospital;
+        this.issueAt = issueAt;
+    }
+}

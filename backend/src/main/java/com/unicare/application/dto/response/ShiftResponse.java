@@ -3,6 +3,7 @@
  */
 package com.unicare.application.dto.response;
 
+import com.unicare.domain.entity.MedicalStaff;
 import com.unicare.domain.entity.Shift;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.ServiceType;
@@ -16,15 +17,20 @@ public class ShiftResponse {
 
     private Long id;
     private Long doctorId;
+    private Long staffId;
     private String doctorUsername;
     private String doctorName;
+    private String staffCode;
     private LocalDate shiftDate;
     private LocalTime startTime;
     private LocalTime endTime;
     private ServiceType serviceType;
+    private ServiceType shiftType;
     private String room;
     private Integer maxQuantity;
+    private Integer maxSlots;
     private Integer bookedQuantity;
+    private Integer bookedSlots;
     private Integer availableSlots;
     private ShiftStatus status;
     private OffsetDateTime createdAt;
@@ -39,22 +45,34 @@ public class ShiftResponse {
         }
         ShiftResponse response = new ShiftResponse();
         response.setId(shift.getId());
-        User doctor = shift.getDoctor();
-        if (doctor != null) {
-            response.setDoctorId(doctor.getId());
-            response.setDoctorUsername(doctor.getUsername());
-            response.setDoctorName(doctor.getFullName());
+
+        MedicalStaff staff = shift.getStaff();
+        if (staff != null) {
+            response.setStaffId(staff.getId());
+            response.setDoctorId(staff.getId());
+            response.setStaffCode(staff.getStaffCode());
+            User user = staff.getUser();
+            if (user != null) {
+                response.setDoctorUsername(user.getUsername());
+                response.setDoctorName(user.getFullName());
+            }
         }
+
         response.setShiftDate(shift.getShiftDate());
         response.setStartTime(shift.getStartTime());
         response.setEndTime(shift.getEndTime());
-        response.setServiceType(shift.getServiceType());
+        response.setServiceType(shift.getShiftType());
+        response.setShiftType(shift.getShiftType());
         response.setRoom(shift.getRoom());
-        int maxQty = shift.getMaxQuantity() != null ? shift.getMaxQuantity() : 0;
-        int bookedQty = shift.getBookedQuantity() != null ? shift.getBookedQuantity() : 0;
-        response.setMaxQuantity(maxQty);
-        response.setBookedQuantity(bookedQty);
-        response.setAvailableSlots(Math.max(0, maxQty - bookedQty));
+
+        int max = shift.getMaxSlots() != null ? shift.getMaxSlots() : 0;
+        int booked = shift.getBookedSlots() != null ? shift.getBookedSlots() : 0;
+        response.setMaxSlots(max);
+        response.setMaxQuantity(max);
+        response.setBookedSlots(booked);
+        response.setBookedQuantity(booked);
+        response.setAvailableSlots(Math.max(0, max - booked));
+
         response.setStatus(shift.getStatus());
         response.setCreatedAt(shift.getCreatedAt());
         response.setUpdatedAt(shift.getUpdatedAt());
@@ -75,6 +93,16 @@ public class ShiftResponse {
 
     public void setDoctorId(Long doctorId) {
         this.doctorId = doctorId;
+        this.staffId = doctorId;
+    }
+
+    public Long getStaffId() {
+        return staffId;
+    }
+
+    public void setStaffId(Long staffId) {
+        this.staffId = staffId;
+        this.doctorId = staffId;
     }
 
     public String getDoctorUsername() {
@@ -91,6 +119,14 @@ public class ShiftResponse {
 
     public void setDoctorName(String doctorName) {
         this.doctorName = doctorName;
+    }
+
+    public String getStaffCode() {
+        return staffCode;
+    }
+
+    public void setStaffCode(String staffCode) {
+        this.staffCode = staffCode;
     }
 
     public LocalDate getShiftDate() {
@@ -123,6 +159,16 @@ public class ShiftResponse {
 
     public void setServiceType(ServiceType serviceType) {
         this.serviceType = serviceType;
+        this.shiftType = serviceType;
+    }
+
+    public ServiceType getShiftType() {
+        return shiftType;
+    }
+
+    public void setShiftType(ServiceType shiftType) {
+        this.shiftType = shiftType;
+        this.serviceType = shiftType;
     }
 
     public String getRoom() {
@@ -139,6 +185,16 @@ public class ShiftResponse {
 
     public void setMaxQuantity(Integer maxQuantity) {
         this.maxQuantity = maxQuantity;
+        this.maxSlots = maxQuantity;
+    }
+
+    public Integer getMaxSlots() {
+        return maxSlots;
+    }
+
+    public void setMaxSlots(Integer maxSlots) {
+        this.maxSlots = maxSlots;
+        this.maxQuantity = maxSlots;
     }
 
     public Integer getBookedQuantity() {
@@ -147,6 +203,16 @@ public class ShiftResponse {
 
     public void setBookedQuantity(Integer bookedQuantity) {
         this.bookedQuantity = bookedQuantity;
+        this.bookedSlots = bookedQuantity;
+    }
+
+    public Integer getBookedSlots() {
+        return bookedSlots;
+    }
+
+    public void setBookedSlots(Integer bookedSlots) {
+        this.bookedSlots = bookedSlots;
+        this.bookedQuantity = bookedSlots;
     }
 
     public Integer getAvailableSlots() {

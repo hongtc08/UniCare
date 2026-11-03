@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -22,8 +22,17 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('user');
   };
 
+  const updateIdentity = useCallback((identity) => {
+    setUser((current) => {
+      if (!current || current.username.trim() !== identity.username) return current;
+      const updated = { ...current, fullName: identity.fullName || current.fullName };
+      localStorage.setItem('user', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, logout, updateIdentity, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

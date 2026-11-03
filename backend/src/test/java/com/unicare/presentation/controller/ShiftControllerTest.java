@@ -67,7 +67,7 @@ class ShiftControllerTest {
         sampleResponse.setMaxQuantity(10);
         sampleResponse.setBookedQuantity(0);
         sampleResponse.setAvailableSlots(10);
-        sampleResponse.setStatus(ShiftStatus.CON_TRONG);
+        sampleResponse.setStatus(ShiftStatus.OPEN);
     }
 
     @Test
@@ -84,7 +84,7 @@ class ShiftControllerTest {
                 .andExpect(jsonPath("$.data[0].id").value(1))
                 .andExpect(jsonPath("$.data[0].serviceType").value("KHAM_DA_KHOA"))
                 .andExpect(jsonPath("$.data[0].room").value("P.101 - Phòng y tế"))
-                .andExpect(jsonPath("$.data[0].status").value("CON_TRONG"));
+                .andExpect(jsonPath("$.data[0].status").value("OPEN"));
     }
 
     @Test
