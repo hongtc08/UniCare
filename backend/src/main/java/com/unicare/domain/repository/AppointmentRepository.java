@@ -44,6 +44,16 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("status") String status
     );
 
+    @Query("SELECT a FROM Appointment a " +
+           "JOIN FETCH a.shift s " +
+           "JOIN FETCH s.staff st " +
+           "JOIN FETCH st.user u " +
+           "JOIN FETCH a.student std " +
+           "JOIN FETCH std.user su " +
+           "WHERE st.id = :staffId " +
+           "ORDER BY s.shiftDate ASC, s.startTime ASC, a.id ASC")
+    List<Appointment> findByStaffIdWithDetails(@Param("staffId") Long staffId);
+
     @Query("SELECT COUNT(a) > 0 FROM Appointment a " +
            "WHERE a.student.id = :studentId AND a.shift.id = :shiftId AND UPPER(a.status) = UPPER(:status)")
     boolean existsByStudentIdAndShiftIdAndStatus(
@@ -54,4 +64,3 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     Optional<Appointment> findByAppointmentCode(String appointmentCode);
 }
-
