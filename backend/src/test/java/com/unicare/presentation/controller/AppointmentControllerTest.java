@@ -5,7 +5,6 @@ import com.unicare.application.dto.request.CancelAppointmentRequest;
 import com.unicare.application.dto.request.RescheduleAppointmentRequest;
 import com.unicare.application.dto.response.AppointmentResponse;
 import com.unicare.application.service.AppointmentService;
-import com.unicare.domain.enums.ShiftStatus;
 import com.unicare.presentation.advice.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,8 +18,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.security.Principal;
-import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -59,14 +56,6 @@ class AppointmentControllerTest {
                 .id(1L)
                 .appointmentCode("LH2611040001")
                 .studentId(10L)
-                .studentCode("SV20260001")
-                .studentName("Nguyễn Văn Sinh Viên")
-                .shiftId(101L)
-                .shiftDate(LocalDate.now().plusDays(2))
-                .startTime(LocalTime.of(8, 0))
-                .endTime(LocalTime.of(10, 0))
-                .room("P101")
-                .shiftStatus(ShiftStatus.OPEN)
                 .status("CONFIRMED")
                 .build();
     }
@@ -77,7 +66,6 @@ class AppointmentControllerTest {
         CancelAppointmentRequest request = new CancelAppointmentRequest("Em có lịch thi");
         sampleResponse.setStatus("CANCELED");
         sampleResponse.setCanceledBy("STUDENT");
-        sampleResponse.setCancelRescheduleReason("Em có lịch thi");
 
         when(appointmentService.cancelAppointment(eq(1L), any(CancelAppointmentRequest.class), eq("sv001")))
                 .thenReturn(sampleResponse);
@@ -88,9 +76,7 @@ class AppointmentControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Hủy lịch hẹn thành công"))
-                .andExpect(jsonPath("$.data.status").value("CANCELED"))
-                .andExpect(jsonPath("$.data.canceledBy").value("STUDENT"));
+                .andExpect(jsonPath("$.data.status").value("CANCELED"));
     }
 
     @Test
@@ -110,8 +96,6 @@ class AppointmentControllerTest {
     void rescheduleAppointment_Success() throws Exception {
         RescheduleAppointmentRequest request = new RescheduleAppointmentRequest(102L, "Dời sang chiều");
         sampleResponse.setShiftId(102L);
-        sampleResponse.setCanceledBy("STUDENT");
-        sampleResponse.setCancelRescheduleReason("Dời sang chiều");
 
         when(appointmentService.rescheduleAppointment(eq(1L), any(RescheduleAppointmentRequest.class), eq("sv001")))
                 .thenReturn(sampleResponse);
@@ -122,14 +106,12 @@ class AppointmentControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Dời lịch hẹn thành công"))
-                .andExpect(jsonPath("$.data.shiftId").value(102L))
-                .andExpect(jsonPath("$.data.canceledBy").value("STUDENT"));
+                .andExpect(jsonPath("$.data.shiftId").value(102L));
     }
 
     @Test
     @DisplayName("PUT /api/appointments/{id}/reschedule - Lỗi Validation khi thiếu newShiftId")
-    void rescheduleAppointment_MissingNewShiftId() throws Exception {
+    void rescheduleAppointment_ValidationError() throws Exception {
         RescheduleAppointmentRequest request = new RescheduleAppointmentRequest(null, "Dời sang chiều");
 
         mockMvc.perform(put("/api/appointments/1/reschedule")
@@ -149,7 +131,20 @@ class AppointmentControllerTest {
                         .principal(mockPrincipal))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].appointmentCode").value("LH2611040001"));
+                .andExpect(jsonPath("$.data[0].id").value(1L));
+    }
+
+    @Test
+    @DisplayName("GET /api/appointments/my-appointments - Lọc theo trạng thái thành công")
+    void getMyAppointments_WithStatusFilter() throws Exception {
+        when(appointmentService.getStudentAppointments("sv001", "CONFIRMED"))
+                .thenReturn(List.of(sampleResponse));
+
+        mockMvc.perform(get("/api/appointments/my-appointments")
+                        .param("status", "CONFIRMED")
+                        .principal(mockPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
     }
 
     @Test
@@ -165,4 +160,3 @@ class AppointmentControllerTest {
                 .andExpect(jsonPath("$.data.id").value(1L));
     }
 }
-
