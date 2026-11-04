@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDate;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -54,7 +55,7 @@ class HealthProfileControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/health-profile/personal-info - Lấy thông tin cá nhân sinh viên đang đăng nhập thành công")
+    @DisplayName("GET /api/health-profile/personal-info & /{studentId} - Lấy thông tin cá nhân sinh viên thành công")
     void getStudentPersonalInfo_Success() throws Exception {
         StudentPersonalInfoResponse response = new StudentPersonalInfoResponse();
         response.setStudentId(2L);
@@ -71,6 +72,8 @@ class HealthProfileControllerTest {
         response.setFacultyName("Công nghệ Phần mềm");
 
         when(healthProfileService.getStudentPersonalInfo("24520579", null)).thenReturn(response);
+        when(healthProfileService.getStudentPersonalInfo("NV001", 2L)).thenReturn(response);
+        when(healthProfileService.getStudentPersonalInfo(null, 2L)).thenReturn(response);
 
         mockMvc.perform(get("/api/health-profile/personal-info")
                         .principal(() -> "24520579"))
@@ -83,10 +86,20 @@ class HealthProfileControllerTest {
                 .andExpect(jsonPath("$.data.email").value("24520579@gm.uit.edu.vn"))
                 .andExpect(jsonPath("$.data.className").value("Kỹ thuật phần mềm K19"))
                 .andExpect(jsonPath("$.data.facultyName").value("Công nghệ Phần mềm"));
+
+        mockMvc.perform(get("/api/health-profile/personal-info/2")
+                        .principal(() -> "NV001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.studentId").value(2));
+
+        assertThat(healthProfileController.getStudentPersonalInfo(2L, null, null, null).getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(healthProfileController.getStudentPersonalInfo(null, 2L, null, null).getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(healthProfileController.getStudentPersonalInfoByStudentId(2L, null).getStatusCode().is2xxSuccessful()).isTrue();
     }
 
     @Test
-    @DisplayName("PUT /api/health-profile/personal-info - Cập nhật thông tin cá nhân sinh viên thành công")
+    @DisplayName("PUT /api/health-profile/personal-info & /{studentId} - Cập nhật thông tin cá nhân sinh viên thành công")
     void updateStudentPersonalInfo_Success() throws Exception {
         String requestJson = """
                 {
@@ -108,6 +121,10 @@ class HealthProfileControllerTest {
 
         when(healthProfileService.updateStudentPersonalInfo(eq("24520579"), isNull(), any(StudentPersonalInfoRequest.class)))
                 .thenReturn(response);
+        when(healthProfileService.updateStudentPersonalInfo(eq("NV001"), eq(2L), any(StudentPersonalInfoRequest.class)))
+                .thenReturn(response);
+        when(healthProfileService.updateStudentPersonalInfo(isNull(), eq(2L), any(StudentPersonalInfoRequest.class)))
+                .thenReturn(response);
 
         mockMvc.perform(put("/api/health-profile/personal-info")
                         .principal(() -> "24520579")
@@ -119,6 +136,18 @@ class HealthProfileControllerTest {
                 .andExpect(jsonPath("$.data.gender").value("Nam"))
                 .andExpect(jsonPath("$.data.phoneNumber").value("0909888777"))
                 .andExpect(jsonPath("$.data.email").value("hongtc@gm.uit.edu.vn"));
+
+        mockMvc.perform(put("/api/health-profile/personal-info/2")
+                        .principal(() -> "NV001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.studentId").value(2));
+
+        StudentPersonalInfoRequest dto = new StudentPersonalInfoRequest();
+        assertThat(healthProfileController.updateStudentPersonalInfo(2L, null, null, dto, null).getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(healthProfileController.updateStudentPersonalInfoByStudentId(2L, dto, null).getStatusCode().is2xxSuccessful()).isTrue();
     }
 
     @Test
