@@ -10,7 +10,7 @@ import {
   Edit3, 
   Loader2 
 } from "lucide-react";
-import { CLINIC_ROOMS, SHIFT_SLOTS, SERVICE_CONFIG } from "./mockShiftData";
+import { CLINIC_ROOMS, SHIFT_SLOTS, SERVICE_CONFIG } from "./shiftConfig";
 
 function formatDateDMY(dateString) {
   if (!dateString) return "";
@@ -42,9 +42,20 @@ export default function ShiftDetailModal({
   const isAdmin = userRole === "ADMIN" || userRole === "BAN_QUAN_LY";
   const isDoctor = !isAdmin;
 
-  const initialDoctorId = isDoctor ? currentUserId : doctors[0]?.id || currentUserId || "";
+  // Lấy bác sĩ ban đầu:
+  // Nếu là Doctor -> currentUserId
+  // Nếu là Admin -> lấy bác sĩ đầu tiên có id hợp lệ (ưu tiên id dạng số từ BE)
+  const getFallbackDoctorId = () => {
+    if (isDoctor) return currentUserId || "";
+    if (doctors.length > 0) {
+      return doctors[0].id;
+    }
+    return currentUserId || "";
+  };
 
-  // Form State: khởi tạo trực tiếp từ props mà không cần setState đồng bộ trong useEffect
+  const initialDoctorId = getFallbackDoctorId();
+
+  // Form State: khởi tạo trực tiếp từ props
   const [formData, setFormData] = useState(() => {
     if (mode === "CREATE" || !shift) {
       const defaultService = "KHAM_DA_KHOA";
@@ -74,9 +85,9 @@ export default function ShiftDetailModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(mode === "CREATE" || mode === "EDIT");
 
-  // Track sự thay đổi của modal hoặc shift qua key hoặc id thay vì setState cascading trong useEffect
-  const [prevTrackKey, setPrevTrackKey] = useState(`${mode}-${shift?.id}-${isOpen}`);
-  const currentTrackKey = `${mode}-${shift?.id}-${isOpen}`;
+  // Track sự thay đổi của modal hoặc shift qua key
+  const [prevTrackKey, setPrevTrackKey] = useState(`${mode}-${shift?.id}-${isOpen}-${doctors.length}`);
+  const currentTrackKey = `${mode}-${shift?.id}-${isOpen}-${doctors.length}`;
 
   if (prevTrackKey !== currentTrackKey) {
     setPrevTrackKey(currentTrackKey);
@@ -90,13 +101,13 @@ export default function ShiftDetailModal({
       setFormData({
         date: selectedDayForCreate || new Date().toISOString().split("T")[0],
         shiftSlot: selectedSlotForCreate || "MORNING",
-        doctorId: initialDoctorId,
+        doctorId: getFallbackDoctorId(),
         serviceType: defaultService,
         room: SERVICE_CONFIG[defaultService].defaultRoom,
         maxCapacity: 10,
       });
     } else {
-      setIsEditing(mode === "EDIT");
+      setIsEditing(isAdmin && mode === "EDIT");
       setFormData({
         date: shift.date,
         shiftSlot:
@@ -136,18 +147,30 @@ export default function ShiftDetailModal({
       return;
     }
 
+    // Kiểm tra Bác sĩ phụ trách:
+    // Nếu ID bác sĩ là string mock dạng 'doc-1' (chưa phải số nguyên từ Database), chặn ngay ở FE để báo cho người dùng
+    const numericDoctorId = Number(formData.doctorId);
+    if (!numericDoctorId || isNaN(numericDoctorId)) {
+      setFormError("Vui lòng chọn một Bác sĩ hợp lệ từ hệ thống (ID bác sĩ phải là tài khoản có trong Database).");
+      return;
+    }
+
     const slotInfo = SHIFT_SLOTS[formData.shiftSlot];
     const doc = doctors.find((d) => String(d.id) === String(formData.doctorId));
     const resolvedDoctorName = isDoctor ? currentUserName : (doc ? doc.name : "Bác sĩ");
 
     const payload = {
-      doctorId: formData.doctorId ? Number(formData.doctorId) || formData.doctorId : undefined,
+      staffId: numericDoctorId,
+      doctorId: numericDoctorId,
       shiftDate: formData.date,
       startTime: slotInfo.startTime,
       endTime: slotInfo.endTime,
+      shiftType: formData.serviceType,
       serviceType: formData.serviceType,
       room: formData.room,
+      maxSlots: Number(formData.maxCapacity),
       maxQuantity: Number(formData.maxCapacity),
+      status: shift?.status || "OPEN",
       doctorName: resolvedDoctorName,
       shiftSlot: formData.shiftSlot,
     };
@@ -325,14 +348,16 @@ export default function ShiftDetailModal({
               )}
 
               <div className="flex items-center gap-2 ml-auto">
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                >
-                  <Edit3 className="w-4 h-4" />
-                  <span>Chỉnh sửa</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    <span>Chỉnh sửa</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onClose}
@@ -404,23 +429,17 @@ export default function ShiftDetailModal({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Phòng khám <span className="text-red-500">*</span>
+                  Phòng khám
                 </label>
-                <select
-                  value={formData.room}
-                  disabled={isSubmitting}
-                  onChange={(e) => {
-                    setFormData({ ...formData, room: e.target.value });
-                    setFormError("");
-                  }}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white disabled:bg-slate-50"
-                >
-                  {CLINIC_ROOMS.map((room) => (
-                    <option key={room} value={room}>
-                      {room}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <input
+                    type="text"
+                    readOnly
+                    disabled
+                    value={formData.room}
+                    className="w-full px-3 py-2 text-sm bg-slate-100 text-slate-700 border border-slate-200 rounded-lg font-medium cursor-not-allowed select-none"
+                  />
+                </div>
               </div>
             </div>
 
@@ -449,7 +468,7 @@ export default function ShiftDetailModal({
                 >
                   {doctors.map((doc) => (
                     <option key={doc.id} value={doc.id}>
-                      {doc.name} - {doc.specialty === "KHAM_DA_KHOA" ? "Khoa Đa Khoa" : "Tâm Lý"}
+                      {doc.name || doc.fullName} {doc.specialty ? `- ${doc.specialty === "KHAM_DA_KHOA" ? "Khoa Đa Khoa" : "Tâm Lý"}` : ""}
                     </option>
                   ))}
                 </select>

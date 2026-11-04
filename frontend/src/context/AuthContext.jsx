@@ -1,18 +1,43 @@
 import { createContext, useContext, useState, useCallback } from 'react';
+import { readSession } from '../utils/session';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
+    let parsed = null;
+    if (saved) {
+      try {
+        parsed = JSON.parse(saved);
+      } catch {
+        parsed = null;
+      }
+    }
+    const tokenSession = readSession();
+    if (tokenSession && parsed) {
+      return {
+        ...parsed,
+        userId: parsed.userId || parsed.id || tokenSession.userId,
+        id: parsed.id || parsed.userId || tokenSession.userId,
+      };
+    }
+    return parsed;
   });
 
   const login = (userData, token) => {
-    setUser(userData);
+    let fullUserData = { ...userData };
+    if (!fullUserData.userId && !fullUserData.id && token) {
+      const tokenSession = readSession();
+      if (tokenSession?.userId) {
+        fullUserData.userId = tokenSession.userId;
+        fullUserData.id = tokenSession.userId;
+      }
+    }
+    setUser(fullUserData);
     localStorage.setItem('token', token);
-    localStorage.setItem('role', userData.role);
-    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('role', fullUserData.role);
+    localStorage.setItem('user', JSON.stringify(fullUserData));
   };
 
   const logout = () => {

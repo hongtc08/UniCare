@@ -5,7 +5,6 @@ import ShiftCalendar from "./ShiftCalendar";
 import ShiftDetailModal from "./ShiftDetailModal";
 import Toast from "../common/Toast";
 import shiftService from "../../services/shiftService";
-import { MOCK_DOCTORS, INITIAL_MOCK_SHIFTS } from "./mockShiftData";
 
 function getMonday(date) {
   const d = new Date(date);
@@ -36,19 +35,24 @@ function mapBackendShiftToUI(shift) {
     startTime: startTime,
     endTime: endTime,
     shiftSlot: shiftSlot,
-    doctorId: shift.doctorId,
+    staffId: shift.staffId ?? shift.doctorId,
+    doctorId: shift.doctorId ?? shift.staffId,
     doctorName: shift.doctorName || "Bác sĩ",
-    serviceType: shift.serviceType,
+    staffCode: shift.staffCode || "",
+    shiftType: shift.shiftType ?? shift.serviceType,
+    serviceType: shift.serviceType ?? shift.shiftType,
     room: shift.room || "P.101 - Phòng y tế",
-    bookedCount: shift.bookedQuantity ?? shift.bookedCount ?? 0,
-    maxCapacity: shift.maxQuantity ?? shift.maxCapacity ?? 10,
-    status: shift.status || "DANG_MO",
+    bookedSlots: shift.bookedSlots ?? shift.bookedQuantity ?? shift.bookedCount ?? 0,
+    bookedCount: shift.bookedSlots ?? shift.bookedQuantity ?? shift.bookedCount ?? 0,
+    maxSlots: shift.maxSlots ?? shift.maxQuantity ?? shift.maxCapacity ?? 10,
+    maxCapacity: shift.maxSlots ?? shift.maxQuantity ?? shift.maxCapacity ?? 10,
+    status: shift.status || "OPEN",
   };
 }
 
 /**
  * ShiftManagementView - Quản lý Lịch trực & Mở Ca khám tuần
- * Tích hợp toàn diện API GET / POST / PUT / DELETE shifts
+ * Tích hợp toàn diện API GET / POST / PUT / DELETE shifts và GET /shifts/doctors
  */
 export default function ShiftManagementView({
   userRole = "ADMIN",
@@ -65,8 +69,11 @@ export default function ShiftManagementView({
   const [selectedService, setSelectedService] = useState("ALL");
   const [selectedRoom, setSelectedRoom] = useState("ALL");
 
+  // State Danh sách Bác sĩ từ BE
+  const [doctorList, setDoctorList] = useState([]);
+
   // State Danh sách ca khám & Trạng thái tải
-  const [shifts, setShifts] = useState(INITIAL_MOCK_SHIFTS);
+  const [shifts, setShifts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -87,14 +94,41 @@ export default function ShiftManagementView({
     }, 4000);
   }, []);
 
+  /**
+   * Tải danh sách Bác sĩ từ endpoint mới của BE3: GET /api/shifts/doctors
+   */
+  useEffect(() => {
+    let ignore = false;
+    const loadDoctors = async () => {
+      try {
+        const res = await shiftService.getDoctors();
+        const raw = res?.data || res || [];
+        if (Array.isArray(raw) && raw.length > 0 && !ignore) {
+          const mapped = raw.map((d) => ({
+            id: d.id,
+            name: d.name || d.fullName || d.username,
+            specialty: "KHAM_DA_KHOA",
+          }));
+          setDoctorList(mapped);
+        }
+      } catch (err) {
+        console.warn("Không thể tải danh sách bác sĩ từ BE, sử dụng danh sách dự phòng:", err);
+      }
+    };
+    loadDoctors();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   const currentDoctor = useMemo(() => {
     return (
-      MOCK_DOCTORS.find((d) => String(d.id) === String(currentUserId)) || {
+      doctorList.find((d) => String(d.id) === String(currentUserId)) || {
         id: currentUserId,
         name: currentUserName || "Bác sĩ cá nhân",
       }
     );
-  }, [currentUserId, currentUserName]);
+  }, [doctorList, currentUserId, currentUserName]);
 
   // Tính 7 ngày trong tuần
   const weekDays = useMemo(() => {
@@ -127,7 +161,7 @@ export default function ShiftManagementView({
   }, [weekDays]);
 
   /**
-   * 1. READ: Gọi API lấy danh sách ca khám tuần
+   * 1. READ: Gọi API lấy danh sách ca khám tuần (truyền cả param room)
    */
   const fetchShifts = useCallback(async () => {
     if (!weekRange.fromDate || !weekRange.toDate) return;
@@ -140,14 +174,19 @@ export default function ShiftManagementView({
         toDate: weekRange.toDate,
       };
 
-      if (isDoctor && currentUserId) {
-        params.doctorId = currentUserId;
-      } else if (isAdmin && selectedDoctor !== "ALL") {
-        params.doctorId = selectedDoctor;
+      if (isDoctor && currentUserId && !isNaN(Number(currentUserId))) {
+        params.doctorId = Number(currentUserId);
+      } else if (isAdmin && selectedDoctor !== "ALL" && !isNaN(Number(selectedDoctor))) {
+        params.doctorId = Number(selectedDoctor);
       }
 
       if (selectedService !== "ALL") {
         params.serviceType = selectedService;
+      }
+
+      // BE3 đã bổ sung param room: truyền trực tiếp lên API
+      if (selectedRoom !== "ALL") {
+        params.room = selectedRoom;
       }
 
       const res = await shiftService.getShifts(params);
@@ -162,7 +201,7 @@ export default function ShiftManagementView({
     } finally {
       setIsLoading(false);
     }
-  }, [weekRange.fromDate, weekRange.toDate, isDoctor, currentUserId, isAdmin, selectedDoctor, selectedService]);
+  }, [weekRange.fromDate, weekRange.toDate, isDoctor, currentUserId, isAdmin, selectedDoctor, selectedService, selectedRoom]);
 
   const fetchShiftsRef = useRef(fetchShifts);
   useEffect(() => {
@@ -180,13 +219,15 @@ export default function ShiftManagementView({
     return () => {
       ignore = true;
     };
-  }, [selectedDate, selectedDoctor, selectedService]);
+  }, [selectedDate, selectedDoctor, selectedService, selectedRoom]);
 
-  // Bộ lọc phụ ở Client (như lọc theo Phòng khám)
+  // Bộ lọc phụ ở Client (đảm bảo tính nhất quán nếu BE offline)
   const filteredShifts = useMemo(() => {
     return shifts.filter((shift) => {
-      if (isDoctor) {
-        if (String(shift.doctorId) !== String(currentUserId)) return false;
+      if (isDoctor && currentUserId && !isNaN(Number(currentUserId))) {
+        if (String(shift.doctorId) !== String(currentUserId) && String(shift.staffId) !== String(currentUserId)) {
+          return false;
+        }
       }
       if (selectedRoom !== "ALL") {
         if (shift.room !== selectedRoom) return false;
@@ -361,7 +402,7 @@ export default function ShiftManagementView({
         onServiceChange={setSelectedService}
         selectedRoom={selectedRoom}
         onRoomChange={setSelectedRoom}
-        doctors={MOCK_DOCTORS}
+        doctors={doctorList}
         userRole={userRole}
         currentDoctorName={currentDoctor.name}
         onResetFilters={handleResetFilters}
@@ -386,7 +427,7 @@ export default function ShiftManagementView({
         onClose={() => setModalState({ ...modalState, isOpen: false })}
         shift={modalState.selectedShift}
         mode={modalState.mode}
-        doctors={MOCK_DOCTORS}
+        doctors={doctorList}
         onCreateShift={handleCreateShift}
         onUpdateShift={handleUpdateShift}
         onDeleteShift={handleDeleteShift}

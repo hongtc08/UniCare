@@ -10,20 +10,34 @@ export const shiftService = {
    * @param {string} [filters.date] YYYY-MM-DD
    * @param {string} [filters.fromDate] YYYY-MM-DD (Đầu tuần)
    * @param {string} [filters.toDate] YYYY-MM-DD (Cuối tuần)
-   * @param {number|string} [filters.doctorId] ID của Bác sĩ
-   * @param {string} [filters.serviceType] KHAM_DA_KHOA | TU_VAN_TAM_LY
-   * @param {string} [filters.status] DANG_MO | DA_DAY | DA_HUY
+   * @param {number|string} [filters.doctorId] ID của Bác sĩ / Nhân viên y tế (staff_id)
+   * @param {number|string} [filters.staffId] Alias chuẩn theo DB (staff_id)
+   * @param {string} [filters.serviceType] KHAM_DA_KHOA | TU_VAN_TAM_LY (shift_type)
+   * @param {string} [filters.shiftType] KHAM_DA_KHOA | TU_VAN_TAM_LY
+   * @param {string} [filters.status] OPEN | FULL | ENDED (hoặc alias cũ CON_TRONG | DA_DAY | DA_HUY)
+   * @param {string} [filters.room] Tên phòng khám
    */
   getShifts: (filters = {}) => {
     const params = {};
     if (filters.date) params.date = filters.date;
     if (filters.fromDate) params.fromDate = filters.fromDate;
     if (filters.toDate) params.toDate = filters.toDate;
-    if (filters.doctorId && filters.doctorId !== "ALL") params.doctorId = filters.doctorId;
-    if (filters.serviceType && filters.serviceType !== "ALL") params.serviceType = filters.serviceType;
+    const staffId = filters.staffId || filters.doctorId;
+    if (staffId && staffId !== "ALL") params.doctorId = staffId;
+    const type = filters.shiftType || filters.serviceType;
+    if (type && type !== "ALL") params.serviceType = type;
     if (filters.status && filters.status !== "ALL") params.status = filters.status;
+    if (filters.room && filters.room !== "ALL") params.room = filters.room;
 
     return axiosClient.get("/shifts", { params });
+  },
+
+  /**
+   * Lấy danh sách Bác sĩ / Nhân viên y tế hoạt động cho Dropdown
+   * GET /api/shifts/doctors
+   */
+  getDoctors: () => {
+    return axiosClient.get("/shifts/doctors");
   },
 
   /**
@@ -36,17 +50,33 @@ export const shiftService = {
 
   /**
    * Mở ca khám mới
+   * Chuẩn hóa payload hỗ trợ cả schema DB mới (staff_id/staffId, shift_type/shiftType, max_slots/maxSlots, room, status)
+   * và các alias tương thích ngược (doctorId, serviceType, maxQuantity).
    * @param {Object} data
    * @param {string} data.shiftDate YYYY-MM-DD
    * @param {string} data.startTime HH:mm
    * @param {string} data.endTime HH:mm
-   * @param {number|string} data.doctorId
-   * @param {string} data.serviceType KHAM_DA_KHOA | TU_VAN_TAM_LY
+   * @param {number|string} [data.staffId]
+   * @param {number|string} [data.doctorId]
+   * @param {string} [data.shiftType] KHAM_DA_KHOA | TU_VAN_TAM_LY
+   * @param {string} [data.serviceType]
    * @param {string} [data.room]
-   * @param {number} data.maxQuantity
+   * @param {number} [data.maxSlots]
+   * @param {number} [data.maxQuantity]
+   * @param {string} [data.status] OPEN | FULL | ENDED
    */
   createShift: (data) => {
-    return axiosClient.post("/shifts", data);
+    const payload = {
+      ...data,
+      staffId: data.staffId ?? data.doctorId,
+      doctorId: data.doctorId ?? data.staffId,
+      shiftType: data.shiftType ?? data.serviceType,
+      serviceType: data.serviceType ?? data.shiftType,
+      maxSlots: data.maxSlots ?? data.maxQuantity,
+      maxQuantity: data.maxQuantity ?? data.maxSlots,
+      status: data.status || "OPEN",
+    };
+    return axiosClient.post("/shifts", payload);
   },
 
   /**
@@ -55,7 +85,16 @@ export const shiftService = {
    * @param {Object} data
    */
   updateShift: (id, data) => {
-    return axiosClient.put(`/shifts/${id}`, data);
+    const payload = {
+      ...data,
+      staffId: data.staffId ?? data.doctorId,
+      doctorId: data.doctorId ?? data.staffId,
+      shiftType: data.shiftType ?? data.serviceType,
+      serviceType: data.serviceType ?? data.shiftType,
+      maxSlots: data.maxSlots ?? data.maxQuantity,
+      maxQuantity: data.maxQuantity ?? data.maxSlots,
+    };
+    return axiosClient.put(`/shifts/${id}`, payload);
   },
 
   /**
@@ -68,4 +107,3 @@ export const shiftService = {
 };
 
 export default shiftService;
-

@@ -8,7 +8,7 @@ import {
   RotateCcw,
   UserCheck
 } from "lucide-react";
-import { CLINIC_ROOMS } from "./mockShiftData";
+import { CLINIC_ROOMS } from "./shiftConfig";
 
 /**
  * Component ShiftFilters - Bộ lọc chuẩn y tế gồm:

@@ -54,10 +54,13 @@ const Login = () => {
         password: password,
       });
 
-      const { token, role, fullName } = response?.data ?? response;
+      const data = response?.data ?? response;
+      const { token, role, fullName } = data;
+      // Trích xuất userId nếu có từ response hoặc decode từ token
+      const userId = data.userId || data.id;
 
       // Lưu trữ state xác thực
-      login({ username, fullName, role }, token);
+      login({ username, fullName, role, userId: userId || undefined }, token);
 
       // Chuyển hướng theo role
       handleNavigateByRole(role);
