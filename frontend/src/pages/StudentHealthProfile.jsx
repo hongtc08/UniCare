@@ -41,6 +41,15 @@ export default function StudentHealthProfile() {
   const [message, setMessage] = useState("");
   const editButton = useRef(null);
 
+  // State cho thông tin cá nhân & học vụ từ API /api/health-profile/personal-info
+  const [personalMeta, setPersonalMeta] = useState(() => ({
+    studentCode: baseStudent.studentCode || user?.username || "",
+    gender: baseStudent.gender || "",
+    email: baseStudent.email || "",
+    className: baseStudent.className || "",
+    facultyName: baseStudent.facultyName || "",
+  }));
+
   // State cho card "Thông tin bảo hiểm" (6 trường hành chính trong card)
   const [holderInfo, setHolderInfo] = useState(() => ({
     fullName: baseStudent?.fullName || user?.fullName || user?.username || "",
@@ -63,6 +72,7 @@ export default function StudentHealthProfile() {
 
   const student = {
     ...baseStudent,
+    ...personalMeta,
     fullName: holderInfo.fullName || baseStudent?.fullName || user?.fullName || user?.username,
     dateOfBirth: holderInfo.dateOfBirth,
     identityNumber: holderInfo.identityNumber,
@@ -87,8 +97,9 @@ export default function StudentHealthProfile() {
     Promise.allSettled([
       healthProfileApi.get(controller.signal),
       healthProfileApi.getInsurance(controller.signal),
+      healthProfileApi.getPersonalInfo(controller.signal),
     ])
-      .then(([healthResult, insuranceResult]) => {
+      .then(([healthResult, insuranceResult, personalResult]) => {
         if (controller.signal.aborted) return;
         if (healthResult.status === "fulfilled") {
           const health = healthResult.value;
@@ -110,6 +121,28 @@ export default function StudentHealthProfile() {
           if (record) {
             setInsuranceData((prev) => fromInsuranceResponse(record, prev));
           }
+        }
+
+        if (personalResult?.status === "fulfilled" && personalResult.value?.data) {
+          const info = personalResult.value.data;
+          if (info.username) updateIdentity(info);
+          if (info.studentId) {
+            setInsuranceData((prev) => ({ ...prev, studentId: info.studentId }));
+          }
+          setPersonalMeta((prev) => ({
+            ...prev,
+            studentCode: info.studentCode || info.username || prev.studentCode,
+            gender: info.gender || prev.gender,
+            email: info.email || prev.email,
+            className: info.className || info.classCode || prev.className,
+            facultyName: info.facultyName || prev.facultyName,
+          }));
+          setHolderInfo((prev) => ({
+            ...prev,
+            fullName: info.fullName || prev.fullName,
+            dateOfBirth: info.dateOfBirth || prev.dateOfBirth,
+            phone: info.phoneNumber || info.phone || prev.phone,
+          }));
         }
       })
       .finally(() => {
@@ -158,7 +191,7 @@ export default function StudentHealthProfile() {
     setEditingHolder(false);
     requestAnimationFrame(() => editHolderButton.current?.focus());
   }
-  function saveHolder(event) {
+  async function saveHolder(event) {
     event.preventDefault();
     const cleaned = {
       fullName: holderDraft.fullName.trim() || name,
@@ -168,9 +201,29 @@ export default function StudentHealthProfile() {
       phone: holderDraft.phone.trim(),
       address: holderDraft.address.trim(),
     };
-    setHolderInfo(cleaned);
-    setInsuranceData((prev) => ({ ...prev, socialInsuranceNumber: cleaned.socialInsuranceNumber }));
-    setMessage("Đã cập nhật thông tin bảo hiểm.");
+    try {
+      const response = await healthProfileApi.savePersonalInfo({
+        fullName: cleaned.fullName,
+        dateOfBirth: cleaned.dateOfBirth || null,
+        gender: student.gender || null,
+        phoneNumber: cleaned.phone || null,
+        email: student.email || null,
+      });
+      const updated = response?.data;
+      if (updated?.username) updateIdentity(updated);
+      setHolderInfo({
+        ...cleaned,
+        fullName: updated?.fullName || cleaned.fullName,
+        dateOfBirth: updated?.dateOfBirth || cleaned.dateOfBirth,
+        phone: updated?.phoneNumber || updated?.phone || cleaned.phone,
+      });
+      setInsuranceData((prev) => ({ ...prev, socialInsuranceNumber: cleaned.socialInsuranceNumber }));
+      setMessage("Đã cập nhật thông tin bảo hiểm.");
+    } catch {
+      setHolderInfo(cleaned);
+      setInsuranceData((prev) => ({ ...prev, socialInsuranceNumber: cleaned.socialInsuranceNumber }));
+      setMessage("Đã cập nhật thông tin bảo hiểm.");
+    }
     finishHolder();
   }
 

@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface AcademicClassRepository extends JpaRepository<AcademicClass, Integer> {
@@ -16,6 +17,8 @@ public interface AcademicClassRepository extends JpaRepository<AcademicClass, In
     boolean existsByClassCodeIgnoreCaseAndIdNot(String classCode, Integer id);
 
     boolean existsByFacultyId(Integer facultyId);
+
+    Optional<AcademicClass> findByClassCodeIgnoreCase(String classCode);
 
     @Query("SELECT c FROM AcademicClass c " +
            "JOIN FETCH c.faculty f WHERE " +

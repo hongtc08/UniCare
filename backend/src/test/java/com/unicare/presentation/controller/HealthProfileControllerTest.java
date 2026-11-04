@@ -1,11 +1,13 @@
 /**
- * Unit test kiểm thử các endpoint GET/PUT của HealthProfileController.
+ * Unit test kiểm thử các endpoint GET/PUT của HealthProfileController (bao gồm hồ sơ sinh học và thông tin cá nhân).
  */
 package com.unicare.presentation.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicare.application.dto.request.HealthProfileRequest;
+import com.unicare.application.dto.request.StudentPersonalInfoRequest;
 import com.unicare.application.dto.response.HealthProfileResponse;
+import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.service.HealthProfileService;
 import com.unicare.presentation.advice.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +21,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.time.LocalDate;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -47,6 +51,74 @@ class HealthProfileControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(healthProfileController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    @DisplayName("GET /api/health-profile/personal-info - Lấy thông tin cá nhân sinh viên đang đăng nhập thành công")
+    void getStudentPersonalInfo_Success() throws Exception {
+        StudentPersonalInfoResponse response = new StudentPersonalInfoResponse();
+        response.setStudentId(2L);
+        response.setUsername("24520579");
+        response.setStudentCode("24520579");
+        response.setFullName("Tăng Chấn Hồng");
+        response.setDateOfBirth(LocalDate.of(2006, 5, 15));
+        response.setGender("Nam");
+        response.setPhoneNumber("0901234567");
+        response.setEmail("24520579@gm.uit.edu.vn");
+        response.setClassCode("SE104.O11");
+        response.setClassName("Kỹ thuật phần mềm K19");
+        response.setFacultyCode("CNPM");
+        response.setFacultyName("Công nghệ Phần mềm");
+
+        when(healthProfileService.getStudentPersonalInfo("24520579", null)).thenReturn(response);
+
+        mockMvc.perform(get("/api/health-profile/personal-info")
+                        .principal(() -> "24520579"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.studentId").value(2))
+                .andExpect(jsonPath("$.data.fullName").value("Tăng Chấn Hồng"))
+                .andExpect(jsonPath("$.data.gender").value("Nam"))
+                .andExpect(jsonPath("$.data.phoneNumber").value("0901234567"))
+                .andExpect(jsonPath("$.data.email").value("24520579@gm.uit.edu.vn"))
+                .andExpect(jsonPath("$.data.className").value("Kỹ thuật phần mềm K19"))
+                .andExpect(jsonPath("$.data.facultyName").value("Công nghệ Phần mềm"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/health-profile/personal-info - Cập nhật thông tin cá nhân sinh viên thành công")
+    void updateStudentPersonalInfo_Success() throws Exception {
+        String requestJson = """
+                {
+                  "fullName": "Tăng Chấn Hồng",
+                  "dateOfBirth": "2006-05-15",
+                  "gender": "Nam",
+                  "phoneNumber": "0909888777",
+                  "email": "hongtc@gm.uit.edu.vn"
+                }
+                """;
+
+        StudentPersonalInfoResponse response = new StudentPersonalInfoResponse();
+        response.setStudentId(2L);
+        response.setFullName("Tăng Chấn Hồng");
+        response.setDateOfBirth(LocalDate.of(2006, 5, 15));
+        response.setGender("Nam");
+        response.setPhoneNumber("0909888777");
+        response.setEmail("hongtc@gm.uit.edu.vn");
+
+        when(healthProfileService.updateStudentPersonalInfo(eq("24520579"), isNull(), any(StudentPersonalInfoRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(put("/api/health-profile/personal-info")
+                        .principal(() -> "24520579")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Cập nhật thông tin cá nhân sinh viên thành công"))
+                .andExpect(jsonPath("$.data.gender").value("Nam"))
+                .andExpect(jsonPath("$.data.phoneNumber").value("0909888777"))
+                .andExpect(jsonPath("$.data.email").value("hongtc@gm.uit.edu.vn"));
     }
 
     @Test

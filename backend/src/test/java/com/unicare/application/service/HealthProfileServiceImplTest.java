@@ -1,19 +1,25 @@
 /**
- * Unit test kiểm thử logic tính BMI, phân loại BMI, validate và phân quyền trong HealthProfileServiceImpl.
+ * Unit test kiểm thử logic tính BMI, phân loại BMI, thông tin cá nhân sinh viên, validate và phân quyền trong HealthProfileServiceImpl.
  */
 package com.unicare.application.service;
 
 import com.unicare.application.dto.request.HealthProfileRequest;
+import com.unicare.application.dto.request.StudentPersonalInfoRequest;
 import com.unicare.application.dto.response.HealthProfileResponse;
+import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.service.impl.HealthProfileServiceImpl;
 import com.unicare.common.exception.BadRequestException;
+import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
+import com.unicare.domain.entity.AcademicClass;
+import com.unicare.domain.entity.Faculty;
 import com.unicare.domain.entity.HealthRecord;
 import com.unicare.domain.entity.Student;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.BloodType;
 import com.unicare.domain.enums.Role;
 import com.unicare.domain.enums.UserStatus;
+import com.unicare.domain.repository.AcademicClassRepository;
 import com.unicare.domain.repository.HealthRecordRepository;
 import com.unicare.domain.repository.StudentRepository;
 import com.unicare.domain.repository.UserRepository;
@@ -27,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +53,9 @@ class HealthProfileServiceImplTest {
     @Mock
     private StudentRepository studentRepository;
 
+    @Mock
+    private AcademicClassRepository academicClassRepository;
+
     @InjectMocks
     private HealthProfileServiceImpl healthProfileService;
 
@@ -59,11 +69,19 @@ class HealthProfileServiceImplTest {
     void setUp() {
         studentUser = new User("24520579", "hashed_pwd", "Tăng Chấn Hồng", Role.SINH_VIEN, UserStatus.ACTIVE);
         studentUser.setId(2L);
+        studentUser.setEmail("24520579@gm.uit.edu.vn");
+        studentUser.setPhoneNumber("0901234567");
+
+        Faculty faculty = new Faculty(1, "CNPM", "Công nghệ Phần mềm");
+        AcademicClass academicClass = new AcademicClass(10, "SE104.O11", "Kỹ thuật phần mềm K19", "K19", faculty);
 
         studentEntity = Student.builder()
                 .id(2L)
                 .user(studentUser)
                 .studentCode("24520579")
+                .academicClass(academicClass)
+                .dateOfBirth(LocalDate.of(2006, 5, 15))
+                .gender("Nam")
                 .build();
 
         otherStudentUser = new User("24521234", "hashed_pwd", "Sinh Viên Khác", Role.SINH_VIEN, UserStatus.ACTIVE);
@@ -76,7 +94,63 @@ class HealthProfileServiceImplTest {
         adminUser.setId(1L);
 
         lenient().when(studentRepository.findById(2L)).thenReturn(Optional.of(studentEntity));
+        lenient().when(studentRepository.findByIdWithDetails(2L)).thenReturn(Optional.of(studentEntity));
         lenient().when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    @Test
+    @DisplayName("GET & PUT thông tin cá nhân sinh viên (Họ tên, Ngày sinh, Giới tính, SĐT, Email, Lớp, Khoa) thành công")
+    void getAndUpdateStudentPersonalInfo_Success() {
+        when(userRepository.findByUsername("24520579")).thenReturn(Optional.of(studentUser));
+
+        StudentPersonalInfoResponse info = healthProfileService.getStudentPersonalInfo("24520579", null);
+        assertThat(info).isNotNull();
+        assertThat(info.getFullName()).isEqualTo("Tăng Chấn Hồng");
+        assertThat(info.getDateOfBirth()).isEqualTo(LocalDate.of(2006, 5, 15));
+        assertThat(info.getGender()).isEqualTo("Nam");
+        assertThat(info.getPhoneNumber()).isEqualTo("0901234567");
+        assertThat(info.getEmail()).isEqualTo("24520579@gm.uit.edu.vn");
+        assertThat(info.getClassName()).isEqualTo("Kỹ thuật phần mềm K19");
+        assertThat(info.getFacultyName()).isEqualTo("Công nghệ Phần mềm");
+
+        StudentPersonalInfoRequest updateReq = new StudentPersonalInfoRequest(
+                "Tăng Chấn Hồng Mới",
+                LocalDate.of(2005, 8, 20),
+                "Nam",
+                "0987654321",
+                "hong.new@gm.uit.edu.vn",
+                null,
+                null
+        );
+
+        StudentPersonalInfoResponse updated = healthProfileService.updateStudentPersonalInfo("24520579", null, updateReq);
+        assertThat(updated.getFullName()).isEqualTo("Tăng Chấn Hồng Mới");
+        assertThat(updated.getDateOfBirth()).isEqualTo(LocalDate.of(2005, 8, 20));
+        assertThat(updated.getGender()).isEqualTo("Nam");
+        assertThat(updated.getPhoneNumber()).isEqualTo("0987654321");
+        assertThat(updated.getEmail()).isEqualTo("hong.new@gm.uit.edu.vn");
+    }
+
+    @Test
+    @DisplayName("Validate cập nhật thông tin cá nhân: trùng email hoặc ngày sinh tương lai ném ngoại lệ")
+    void updateStudentPersonalInfo_ValidationErrors() {
+        when(userRepository.findByUsername("24520579")).thenReturn(Optional.of(studentUser));
+        when(userRepository.existsByEmailIgnoreCaseAndIdNot("dup@gm.uit.edu.vn", 2L)).thenReturn(true);
+
+        StudentPersonalInfoRequest dupEmailReq = new StudentPersonalInfoRequest(
+                "Tăng Chấn Hồng", null, "Nam", "0901234567", "dup@gm.uit.edu.vn", null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, dupEmailReq))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("đã được sử dụng");
+
+        StudentPersonalInfoRequest futureDobReq = new StudentPersonalInfoRequest(
+                "Tăng Chấn Hồng", LocalDate.now().plusDays(5), "Nam", "0901234567", null, null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, futureDobReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Ngày sinh không được lớn hơn ngày hiện tại");
     }
 
     @Test
