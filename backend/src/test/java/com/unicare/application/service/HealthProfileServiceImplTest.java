@@ -1,19 +1,25 @@
 /**
- * Unit test kiểm thử logic tính BMI, phân loại BMI, validate và phân quyền trong HealthProfileServiceImpl.
+ * Unit test kiểm thử logic tính BMI, phân loại BMI, thông tin cá nhân sinh viên, validate và phân quyền trong HealthProfileServiceImpl.
  */
 package com.unicare.application.service;
 
 import com.unicare.application.dto.request.HealthProfileRequest;
+import com.unicare.application.dto.request.StudentPersonalInfoRequest;
 import com.unicare.application.dto.response.HealthProfileResponse;
+import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.service.impl.HealthProfileServiceImpl;
 import com.unicare.common.exception.BadRequestException;
+import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
+import com.unicare.domain.entity.AcademicClass;
+import com.unicare.domain.entity.Faculty;
 import com.unicare.domain.entity.HealthRecord;
 import com.unicare.domain.entity.Student;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.BloodType;
 import com.unicare.domain.enums.Role;
 import com.unicare.domain.enums.UserStatus;
+import com.unicare.domain.repository.AcademicClassRepository;
 import com.unicare.domain.repository.HealthRecordRepository;
 import com.unicare.domain.repository.StudentRepository;
 import com.unicare.domain.repository.UserRepository;
@@ -27,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +53,9 @@ class HealthProfileServiceImplTest {
     @Mock
     private StudentRepository studentRepository;
 
+    @Mock
+    private AcademicClassRepository academicClassRepository;
+
     @InjectMocks
     private HealthProfileServiceImpl healthProfileService;
 
@@ -54,16 +64,26 @@ class HealthProfileServiceImplTest {
     private User doctorUser;
     private User adminUser;
     private Student studentEntity;
+    private AcademicClass academicClass;
+    private Faculty faculty;
 
     @BeforeEach
     void setUp() {
         studentUser = new User("24520579", "hashed_pwd", "Tăng Chấn Hồng", Role.SINH_VIEN, UserStatus.ACTIVE);
         studentUser.setId(2L);
+        studentUser.setEmail("24520579@gm.uit.edu.vn");
+        studentUser.setPhoneNumber("0901234567");
+
+        faculty = new Faculty(1, "CNPM", "Công nghệ Phần mềm");
+        academicClass = new AcademicClass(10, "SE104.O11", "Kỹ thuật phần mềm K19", "K19", faculty);
 
         studentEntity = Student.builder()
                 .id(2L)
                 .user(studentUser)
                 .studentCode("24520579")
+                .academicClass(academicClass)
+                .dateOfBirth(LocalDate.of(2006, 5, 15))
+                .gender("Nam")
                 .build();
 
         otherStudentUser = new User("24521234", "hashed_pwd", "Sinh Viên Khác", Role.SINH_VIEN, UserStatus.ACTIVE);
@@ -76,7 +96,189 @@ class HealthProfileServiceImplTest {
         adminUser.setId(1L);
 
         lenient().when(studentRepository.findById(2L)).thenReturn(Optional.of(studentEntity));
+        lenient().when(studentRepository.findByIdWithDetails(2L)).thenReturn(Optional.of(studentEntity));
         lenient().when(studentRepository.save(any(Student.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    @Test
+    @DisplayName("GET & PUT thông tin cá nhân sinh viên (Họ tên, Ngày sinh, Giới tính, SĐT, Email, Lớp, Khoa) thành công")
+    void getAndUpdateStudentPersonalInfo_Success() {
+        when(userRepository.findByUsername("24520579")).thenReturn(Optional.of(studentUser));
+
+        StudentPersonalInfoResponse info = healthProfileService.getStudentPersonalInfo("24520579", null);
+        assertThat(info).isNotNull();
+        assertThat(info.getStudentId()).isEqualTo(2L);
+        assertThat(info.getUsername()).isEqualTo("24520579");
+        assertThat(info.getStudentCode()).isEqualTo("24520579");
+        assertThat(info.getFullName()).isEqualTo("Tăng Chấn Hồng");
+        assertThat(info.getDateOfBirth()).isEqualTo(LocalDate.of(2006, 5, 15));
+        assertThat(info.getGender()).isEqualTo("Nam");
+        assertThat(info.getPhoneNumber()).isEqualTo("0901234567");
+        assertThat(info.getPhone()).isEqualTo("0901234567");
+        assertThat(info.getEmail()).isEqualTo("24520579@gm.uit.edu.vn");
+        assertThat(info.getClassId()).isEqualTo(10);
+        assertThat(info.getClassCode()).isEqualTo("SE104.O11");
+        assertThat(info.getClassName()).isEqualTo("Kỹ thuật phần mềm K19");
+        assertThat(info.getAcademicYear()).isEqualTo("K19");
+        assertThat(info.getFacultyId()).isEqualTo(1);
+        assertThat(info.getFacultyCode()).isEqualTo("CNPM");
+        assertThat(info.getFacultyName()).isEqualTo("Công nghệ Phần mềm");
+
+        when(academicClassRepository.findById(10)).thenReturn(Optional.of(academicClass));
+
+        StudentPersonalInfoRequest updateReq = new StudentPersonalInfoRequest();
+        updateReq.setFullName("Tăng Chấn Hồng Mới");
+        updateReq.setDateOfBirth(LocalDate.of(2005, 8, 20));
+        updateReq.setGender("Nam");
+        updateReq.setPhoneNumber("0987654321");
+        updateReq.setEmail("hong.new@gm.uit.edu.vn");
+        updateReq.setClassId(10);
+        updateReq.setClassCode("SE104.O11");
+
+        StudentPersonalInfoResponse updated = healthProfileService.updateStudentPersonalInfo("24520579", null, updateReq);
+        assertThat(updated.getFullName()).isEqualTo("Tăng Chấn Hồng Mới");
+        assertThat(updated.getDateOfBirth()).isEqualTo(LocalDate.of(2005, 8, 20));
+        assertThat(updated.getGender()).isEqualTo("Nam");
+        assertThat(updated.getPhoneNumber()).isEqualTo("0987654321");
+        assertThat(updated.getEmail()).isEqualTo("hong.new@gm.uit.edu.vn");
+    }
+
+    @Test
+    @DisplayName("Cập nhật thông tin cá nhân với chuỗi rỗng để xóa email/phone/gender, tìm lớp theo classCode và khởi tạo Student mới")
+    void updateStudentPersonalInfo_BlankFieldsAndClassCodeAndNewStudent() {
+        when(userRepository.findByUsername("24520579")).thenReturn(Optional.of(studentUser));
+        when(studentRepository.findByIdWithDetails(2L)).thenReturn(Optional.empty());
+        when(studentRepository.findById(2L)).thenReturn(Optional.empty());
+        when(academicClassRepository.findByClassCodeIgnoreCase("SE104.O11")).thenReturn(Optional.of(academicClass));
+
+        StudentPersonalInfoRequest clearReq = new StudentPersonalInfoRequest(
+                null,
+                null,
+                "   ",
+                "   ",
+                "   ",
+                null,
+                "SE104.O11"
+        );
+
+        StudentPersonalInfoResponse res = healthProfileService.updateStudentPersonalInfo("24520579", null, clearReq);
+        assertThat(res.getEmail()).isNull();
+        assertThat(res.getPhoneNumber()).isNull();
+        assertThat(res.getGender()).isNull();
+        assertThat(res.getClassCode()).isEqualTo("SE104.O11");
+
+        // Test 3-arg constructor (academicClassRepository == null)
+        HealthProfileServiceImpl threeArgService = new HealthProfileServiceImpl(
+                healthRecordRepository, userRepository, studentRepository
+        );
+        StudentPersonalInfoResponse resNoClassRepo = threeArgService.updateStudentPersonalInfo(
+                "24520579", null, new StudentPersonalInfoRequest("Tên Mới", null, null, null, null, 10, "SE104")
+        );
+        assertThat(resNoClassRepo.getFullName()).isEqualTo("Tên Mới");
+    }
+
+    @Test
+    @DisplayName("Validate cập nhật thông tin cá nhân: đầy đủ các nhánh lỗi BadRequest, DuplicateResource và ResourceNotFound")
+    void updateStudentPersonalInfo_ValidationErrors() {
+        when(userRepository.findByUsername("24520579")).thenReturn(Optional.of(studentUser));
+        when(userRepository.existsByEmailIgnoreCaseAndIdNot("dup@gm.uit.edu.vn", 2L)).thenReturn(true);
+
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, null))
+                .isInstanceOf(BadRequestException.class);
+
+        StudentPersonalInfoRequest blankNameReq = new StudentPersonalInfoRequest(
+                "   ", null, null, null, null, null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, blankNameReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Họ và tên không được để trống");
+
+        StudentPersonalInfoRequest longNameReq = new StudentPersonalInfoRequest(
+                "A".repeat(101), null, null, null, null, null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, longNameReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("100 ký tự");
+
+        StudentPersonalInfoRequest invalidEmailReq = new StudentPersonalInfoRequest(
+                null, null, null, null, "invalid-email-no-at", null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, invalidEmailReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Định dạng email không hợp lệ");
+
+        StudentPersonalInfoRequest longEmailReq = new StudentPersonalInfoRequest(
+                null, null, null, null, "a".repeat(95) + "@uit.edu.vn", null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, longEmailReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Định dạng email không hợp lệ");
+
+        StudentPersonalInfoRequest dupEmailReq = new StudentPersonalInfoRequest(
+                "Tăng Chấn Hồng", null, "Nam", "0901234567", "dup@gm.uit.edu.vn", null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, dupEmailReq))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("đã được sử dụng");
+
+        StudentPersonalInfoRequest longPhoneReq = new StudentPersonalInfoRequest(
+                null, null, null, "01234567890123456", null, null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, longPhoneReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("15 ký tự");
+
+        StudentPersonalInfoRequest futureDobReq = new StudentPersonalInfoRequest(
+                "Tăng Chấn Hồng", LocalDate.now().plusDays(5), "Nam", "0901234567", null, null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, futureDobReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Ngày sinh không được lớn hơn ngày hiện tại");
+
+        StudentPersonalInfoRequest longGenderReq = new StudentPersonalInfoRequest(
+                null, null, "Giới tính quá dài", null, null, null, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, longGenderReq))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("10 ký tự");
+
+        when(academicClassRepository.findById(999)).thenReturn(Optional.empty());
+        StudentPersonalInfoRequest missingClassIdReq = new StudentPersonalInfoRequest(
+                null, null, null, null, null, 999, null
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, missingClassIdReq))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        when(academicClassRepository.findByClassCodeIgnoreCase("UNKNOWN")).thenReturn(Optional.empty());
+        StudentPersonalInfoRequest missingClassCodeReq = new StudentPersonalInfoRequest(
+                null, null, null, null, null, null, "UNKNOWN"
+        );
+        assertThatThrownBy(() -> healthProfileService.updateStudentPersonalInfo("24520579", null, missingClassCodeReq))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Kiểm tra các nhánh mapping của StudentPersonalInfoResponse và Student entity")
+    void studentPersonalInfoResponseAndEntity_EdgeBranches() {
+        assertThat(StudentPersonalInfoResponse.fromEntities(null, null)).isNull();
+
+        Student orphanStudent = new Student(null, studentUser, "   ", new AcademicClass("C1", "Lớp 1", "K19", null));
+        orphanStudent.setUserId(2L);
+        assertThat(orphanStudent.getUserId()).isEqualTo(2L);
+        orphanStudent.setDateOfBirth(LocalDate.of(2005, 1, 1));
+        orphanStudent.setGender("Nữ");
+
+        StudentPersonalInfoResponse fromStudentOnly = StudentPersonalInfoResponse.fromEntities(null, orphanStudent);
+        assertThat(fromStudentOnly).isNotNull();
+        assertThat(fromStudentOnly.getStudentId()).isEqualTo(2L);
+        assertThat(fromStudentOnly.getClassCode()).isEqualTo("C1");
+        assertThat(fromStudentOnly.getFacultyName()).isNull();
+
+        Student noUserAndNoId = new Student(null, null, null, null);
+        StudentPersonalInfoResponse minimal = StudentPersonalInfoResponse.fromEntities(null, noUserAndNoId);
+        assertThat(minimal).isNotNull();
+        assertThat(minimal.getStudentId()).isNull();
     }
 
     @Test

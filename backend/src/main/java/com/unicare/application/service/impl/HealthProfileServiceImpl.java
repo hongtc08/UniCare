@@ -1,18 +1,23 @@
 /**
- * Lớp triển khai nghiệp vụ quản lý hồ sơ sức khỏe, kiểm tra phân quyền và tự động tính BMI.
+ * Lớp triển khai nghiệp vụ quản lý hồ sơ sức khỏe, thông tin cá nhân sinh viên, kiểm tra phân quyền và tự động tính BMI.
  */
 package com.unicare.application.service.impl;
 
 import com.unicare.application.dto.request.HealthProfileRequest;
+import com.unicare.application.dto.request.StudentPersonalInfoRequest;
 import com.unicare.application.dto.response.HealthProfileResponse;
+import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.service.HealthProfileService;
 import com.unicare.common.exception.BadRequestException;
+import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
+import com.unicare.domain.entity.AcademicClass;
 import com.unicare.domain.entity.HealthRecord;
 import com.unicare.domain.entity.Student;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.BloodType;
 import com.unicare.domain.enums.Role;
+import com.unicare.domain.repository.AcademicClassRepository;
 import com.unicare.domain.repository.HealthRecordRepository;
 import com.unicare.domain.repository.StudentRepository;
 import com.unicare.domain.repository.UserRepository;
@@ -23,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 @Service
@@ -36,15 +42,25 @@ public class HealthProfileServiceImpl implements HealthProfileService {
     private final HealthRecordRepository healthRecordRepository;
     private final UserRepository userRepository;
     private final StudentRepository studentRepository;
+    private final AcademicClassRepository academicClassRepository;
+
+    public HealthProfileServiceImpl(
+            HealthRecordRepository healthRecordRepository,
+            UserRepository userRepository,
+            StudentRepository studentRepository) {
+        this(healthRecordRepository, userRepository, studentRepository, null);
+    }
 
     @Autowired
     public HealthProfileServiceImpl(
             HealthRecordRepository healthRecordRepository,
             UserRepository userRepository,
-            StudentRepository studentRepository) {
+            StudentRepository studentRepository,
+            AcademicClassRepository academicClassRepository) {
         this.healthRecordRepository = healthRecordRepository;
         this.userRepository = userRepository;
         this.studentRepository = studentRepository;
+        this.academicClassRepository = academicClassRepository;
     }
 
     @Override
@@ -101,6 +117,110 @@ public class HealthProfileServiceImpl implements HealthProfileService {
 
         HealthRecord savedRecord = healthRecordRepository.save(record);
         return HealthProfileResponse.fromEntity(savedRecord);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public StudentPersonalInfoResponse getStudentPersonalInfo(String currentUsername, Long targetStudentId) {
+        User targetUser = resolveAndAuthorizeTargetStudent(currentUsername, targetStudentId);
+        Student student = studentRepository.findByIdWithDetails(targetUser.getId())
+                .or(() -> studentRepository.findById(targetUser.getId()))
+                .orElse(null);
+
+        return StudentPersonalInfoResponse.fromEntities(targetUser, student);
+    }
+
+    @Override
+    @Transactional
+    public StudentPersonalInfoResponse updateStudentPersonalInfo(
+            String currentUsername,
+            Long targetStudentId,
+            StudentPersonalInfoRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Dữ liệu thông tin cá nhân không được để trống");
+        }
+
+        User targetUser = resolveAndAuthorizeTargetStudent(currentUsername, targetStudentId);
+        Student student = studentRepository.findByIdWithDetails(targetUser.getId())
+                .orElseGet(() -> resolveOrCreateStudent(targetUser));
+
+        if (request.getFullName() != null) {
+            String cleanName = request.getFullName().trim();
+            if (cleanName.isEmpty()) {
+                throw new BadRequestException("Họ và tên không được để trống");
+            }
+            if (cleanName.length() > 100) {
+                throw new BadRequestException("Họ và tên không được vượt quá 100 ký tự");
+            }
+            targetUser.setFullName(cleanName);
+        }
+
+        if (request.getEmail() != null) {
+            String cleanEmail = request.getEmail().trim();
+            if (cleanEmail.isEmpty()) {
+                targetUser.setEmail(null);
+            } else {
+                if (cleanEmail.length() > 100 || !cleanEmail.contains("@")) {
+                    throw new BadRequestException("Định dạng email không hợp lệ");
+                }
+                if (userRepository.existsByEmailIgnoreCaseAndIdNot(cleanEmail, targetUser.getId())) {
+                    throw new DuplicateResourceException("Email '" + cleanEmail + "' đã được sử dụng bởi tài khoản khác.");
+                }
+                targetUser.setEmail(cleanEmail);
+            }
+        }
+
+        if (request.getPhoneNumber() != null) {
+            String cleanPhone = request.getPhoneNumber().trim();
+            if (cleanPhone.isEmpty()) {
+                targetUser.setPhoneNumber(null);
+            } else {
+                if (cleanPhone.length() > 15) {
+                    throw new BadRequestException("Số điện thoại không được vượt quá 15 ký tự");
+                }
+                targetUser.setPhoneNumber(cleanPhone);
+            }
+        }
+
+        if (request.getDateOfBirth() != null) {
+            if (request.getDateOfBirth().isAfter(LocalDate.now())) {
+                throw new BadRequestException("Ngày sinh không được lớn hơn ngày hiện tại");
+            }
+            student.setDateOfBirth(request.getDateOfBirth());
+        }
+
+        if (request.getGender() != null) {
+            String cleanGender = request.getGender().trim();
+            if (cleanGender.isEmpty()) {
+                student.setGender(null);
+            } else {
+                if (cleanGender.length() > 10) {
+                    throw new BadRequestException("Giới tính không được vượt quá 10 ký tự");
+                }
+                student.setGender(cleanGender);
+            }
+        }
+
+        if (academicClassRepository != null) {
+            if (request.getClassId() != null) {
+                AcademicClass academicClass = academicClassRepository.findById(request.getClassId())
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Không tìm thấy lớp học với mã ID: " + request.getClassId()));
+                student.setAcademicClass(academicClass);
+            } else if (request.getClassCode() != null && !request.getClassCode().isBlank()) {
+                String cleanClassCode = request.getClassCode().trim();
+                AcademicClass academicClass = academicClassRepository.findByClassCodeIgnoreCase(cleanClassCode)
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Không tìm thấy lớp học với mã lớp: " + cleanClassCode));
+                student.setAcademicClass(academicClass);
+            }
+        }
+
+        User savedUser = userRepository.save(targetUser);
+        student.setUser(savedUser);
+        Student savedStudent = studentRepository.save(student);
+
+        return StudentPersonalInfoResponse.fromEntities(savedUser, savedStudent);
     }
 
     @Override
