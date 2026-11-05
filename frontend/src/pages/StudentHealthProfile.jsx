@@ -146,6 +146,11 @@ export default function StudentHealthProfile() {
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
+      })
+      .catch((failure) => {
+        if (!controller.signal.aborted) {
+          setError(requestError(failure, "Không xử lý được dữ liệu hồ sơ. Vui lòng thử lại."));
+        }
       });
     return () => controller.abort();
   }, [reload, updateIdentity]);
@@ -329,10 +334,10 @@ export default function StudentHealthProfile() {
             {editing ? (
               <form className="health-form" onSubmit={save}>
                 <fieldset className="health-form-grid" disabled={saving}>
-                  {[{ key: "height", unit: "cm", min: 0.1, max: 300 }, { key: "weight", unit: "kg", min: 0.1, max: 500 }].map(({ key, unit, min, max }, index) => (
+                  {[{ key: "height", unit: "cm", min: 0.1, max: 300 }, { key: "weight", unit: "kg", min: 0.1, max: 500 }].map(({ key, unit, min, max }) => (
                     <label className="form-field" key={key}>
                       <span>{labels[key]} ({unit}) <span className="required">*</span></span>
-                      <input autoFocus={index === 0} type="number" required min={min} max={max} step="0.1" value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} aria-describedby={`${key}-hint`} />
+                      <input type="number" required min={min} max={max} step="0.1" value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} aria-describedby={`${key}-hint`} />
                       <small id={`${key}-hint`}>Từ {min} đến {max} {unit}.</small>
                     </label>
                   ))}
@@ -396,7 +401,6 @@ export default function StudentHealthProfile() {
                   <label className="form-field">
                     <span>Họ tên <span className="required">*</span></span>
                     <input
-                      autoFocus
                       type="text"
                       required
                       maxLength={100}
@@ -439,7 +443,6 @@ export default function StudentHealthProfile() {
             <label className="form-field">
               <span>Số thẻ BHYT <span className="required">*</span></span>
               <input
-                autoFocus
                 type="text"
                 required
                 maxLength={15}
