@@ -4,6 +4,7 @@
 package com.unicare.presentation.controller;
 
 import com.unicare.application.dto.request.ShiftRequest;
+import com.unicare.application.dto.response.DoctorOptionResponse;
 import com.unicare.application.dto.response.ShiftResponse;
 import com.unicare.application.service.ShiftService;
 import com.unicare.common.response.ApiResponse;
@@ -31,7 +32,7 @@ public class ShiftController {
     }
 
     /**
-     * Lấy danh sách ca khám (hỗ trợ lọc theo ngày, khoảng ngày trong tuần, bác sĩ, loại dịch vụ, trạng thái)
+     * Lấy danh sách ca khám (hỗ trợ lọc theo ngày, khoảng ngày trong tuần, bác sĩ, loại dịch vụ, trạng thái, phòng khám)
      * GET /api/shifts
      */
     @GetMapping
@@ -42,10 +43,24 @@ public class ShiftController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
             @RequestParam(required = false) Long doctorId,
             @RequestParam(required = false) ServiceType serviceType,
-            @RequestParam(required = false) ShiftStatus status
+            @RequestParam(required = false) ShiftStatus status,
+            @RequestParam(required = false) String room
     ) {
-        List<ShiftResponse> shifts = shiftService.getShifts(date, fromDate, toDate, doctorId, serviceType, status);
+        List<ShiftResponse> shifts = shiftService.getShifts(
+                date, fromDate, toDate, doctorId, serviceType, status, room
+        );
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách ca khám thành công", shifts));
+    }
+
+    /**
+     * Lấy danh sách Bác sĩ / Nhân viên y tế đang hoạt động (ACTIVE) để hiển thị Dropdown chọn bác sĩ
+     * GET /api/shifts/doctors
+     */
+    @GetMapping("/doctors")
+    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE', 'SINH_VIEN')")
+    public ResponseEntity<ApiResponse<List<DoctorOptionResponse>>> getAvailableDoctors() {
+        List<DoctorOptionResponse> doctors = shiftService.getAvailableDoctors();
+        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách bác sĩ thành công", doctors));
     }
 
     /**

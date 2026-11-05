@@ -11,6 +11,7 @@ import MedicalList from "./pages/MedicalList";
 import Unauthorized from "./pages/Unauthorized";
 import Accounts from "./pages/admin/Accounts";
 import Catalogs from "./pages/admin/Catalogs";
+import ShiftManagement from "./pages/ShiftManagement";
 
 function HomeRedirect() {
   const { user } = useAuth();
@@ -50,14 +51,15 @@ export default function App() {
                 <Route path="/medical-records" element={<UpcomingFeature />} />
                 <Route path="/emergency" element={<UpcomingFeature />} />
               </Route>
+              {/* Phân hệ Quản lý Lịch trực & Mở ca khám: Chỉ dành cho Bác sĩ/Nhân viên y tế và Quản lý */}
               <Route
                 element={
                   <ProtectedRoute
-                    allowedRoles={["SINH_VIEN", "NHAN_VIEN_Y_TE"]}
+                    allowedRoles={["NHAN_VIEN_Y_TE", "BAN_QUAN_LY"]}
                   />
                 }
               >
-                <Route path="/lich-kham" element={<UpcomingFeature />} />
+                <Route path="/shifts" element={<ShiftManagement />} />
               </Route>
               <Route element={<ProtectedRoute allowedRoles={["SINH_VIEN"]} />}>
                 <Route path="/mental-health" element={<UpcomingFeature />} />

@@ -1,11 +1,12 @@
 /**
- * Entity ánh xạ bảng shifts lưu trữ thông tin ca khám trong tuần của bác sĩ/chuyên gia tâm lý.
+ * Entity ánh xạ bảng shifts lưu trữ thông tin ca khám trong tuần theo Schema SQL chuẩn.
  */
 package com.unicare.domain.entity;
 
 import com.unicare.domain.enums.ServiceType;
 import com.unicare.domain.enums.ShiftStatus;
 import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -13,6 +14,11 @@ import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "shifts")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Shift {
 
     @Id
@@ -20,8 +26,8 @@ public class Shift {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "doctor_id", referencedColumnName = "id", nullable = false)
-    private User doctor;
+    @JoinColumn(name = "staff_id", referencedColumnName = "user_id", nullable = false)
+    private MedicalStaff staff;
 
     @Column(name = "shift_date", nullable = false)
     private LocalDate shiftDate;
@@ -33,21 +39,23 @@ public class Shift {
     private LocalTime endTime;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "service_type", nullable = false, length = 30)
-    private ServiceType serviceType;
+    @Column(name = "shift_type", nullable = false, length = 30)
+    private ServiceType shiftType;
 
     @Column(name = "room", length = 100)
     private String room;
 
-    @Column(name = "max_quantity", nullable = false)
-    private Integer maxQuantity;
+    @Column(name = "max_slots", nullable = false)
+    private Integer maxSlots;
 
-    @Column(name = "booked_quantity", nullable = false)
-    private Integer bookedQuantity = 0;
+    @Column(name = "booked_slots", nullable = false)
+    @Builder.Default
+    private Integer bookedSlots = 0;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
-    private ShiftStatus status = ShiftStatus.CON_TRONG;
+    @Builder.Default
+    private ShiftStatus status = ShiftStatus.OPEN;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -55,39 +63,40 @@ public class Shift {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
-    public Shift() {
-    }
-
     public Shift(
-            User doctor,
+            MedicalStaff staff,
             LocalDate shiftDate,
             LocalTime startTime,
             LocalTime endTime,
-            ServiceType serviceType,
+            ServiceType shiftType,
             String room,
-            Integer maxQuantity
+            Integer maxSlots
     ) {
-        this.doctor = doctor;
+        this.staff = staff;
         this.shiftDate = shiftDate;
         this.startTime = startTime;
         this.endTime = endTime;
-        this.serviceType = serviceType;
+        this.shiftType = shiftType;
         this.room = room;
-        this.maxQuantity = maxQuantity;
-        this.bookedQuantity = 0;
-        this.status = ShiftStatus.CON_TRONG;
+        this.maxSlots = maxSlots;
+        this.bookedSlots = 0;
+        this.status = ShiftStatus.OPEN;
     }
 
     @PrePersist
     public void onCreate() {
         OffsetDateTime now = OffsetDateTime.now();
-        this.createdAt = now;
-        this.updatedAt = now;
-        if (this.bookedQuantity == null) {
-            this.bookedQuantity = 0;
+        if (this.createdAt == null) {
+            this.createdAt = now;
+        }
+        if (this.updatedAt == null) {
+            this.updatedAt = now;
+        }
+        if (this.bookedSlots == null) {
+            this.bookedSlots = 0;
         }
         if (this.status == null) {
-            this.status = ShiftStatus.CON_TRONG;
+            this.status = ShiftStatus.OPEN;
         }
     }
 
@@ -96,99 +105,32 @@ public class Shift {
         this.updatedAt = OffsetDateTime.now();
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
+    // Helper compatibility methods
     public User getDoctor() {
-        return doctor;
-    }
-
-    public void setDoctor(User doctor) {
-        this.doctor = doctor;
-    }
-
-    public LocalDate getShiftDate() {
-        return shiftDate;
-    }
-
-    public void setShiftDate(LocalDate shiftDate) {
-        this.shiftDate = shiftDate;
-    }
-
-    public LocalTime getStartTime() {
-        return startTime;
-    }
-
-    public void setStartTime(LocalTime startTime) {
-        this.startTime = startTime;
-    }
-
-    public LocalTime getEndTime() {
-        return endTime;
-    }
-
-    public void setEndTime(LocalTime endTime) {
-        this.endTime = endTime;
+        return staff != null ? staff.getUser() : null;
     }
 
     public ServiceType getServiceType() {
-        return serviceType;
+        return shiftType;
     }
 
     public void setServiceType(ServiceType serviceType) {
-        this.serviceType = serviceType;
-    }
-
-    public String getRoom() {
-        return room;
-    }
-
-    public void setRoom(String room) {
-        this.room = room;
+        this.shiftType = serviceType;
     }
 
     public Integer getMaxQuantity() {
-        return maxQuantity;
+        return maxSlots;
     }
 
     public void setMaxQuantity(Integer maxQuantity) {
-        this.maxQuantity = maxQuantity;
+        this.maxSlots = maxQuantity;
     }
 
     public Integer getBookedQuantity() {
-        return bookedQuantity;
+        return bookedSlots;
     }
 
     public void setBookedQuantity(Integer bookedQuantity) {
-        this.bookedQuantity = bookedQuantity;
-    }
-
-    public ShiftStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(ShiftStatus status) {
-        this.status = status;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(OffsetDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+        this.bookedSlots = bookedQuantity;
     }
 }
