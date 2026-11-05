@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --experimental-vm-modules --test tests/*.test.mjs",
+    "test:ui:build": "vite build --config tests/ui/vite.config.js",
+    "test:ui:preview": "vite preview --config tests/ui/vite.config.js --host 127.0.0.1 --port 5176 --strictPort",
     "preview": "vite preview"
   },
   "dependencies": {
