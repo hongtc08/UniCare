@@ -1,0 +1,12 @@
+.slot-picker { border: 0; padding: 0; margin: 0; min-width: 0; }
+.slot-picker legend { margin-bottom: 12px; font-size: 14px; font-weight: 600; color: var(--text-main); }
+.slot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.slot-choice { display: flex; min-height: 76px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 10px; border: 1px solid var(--border-light); border-radius: 8px; background: white; color: var(--text-main); font-variant-numeric: tabular-nums; }
+.slot-choice:hover:not(:disabled) { border-color: var(--primary-blue); background: #f3f6ff; }
+.slot-choice.is-selected { border-color: var(--primary-blue); background: var(--primary-blue); color: white; }
+.slot-choice small { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #53657e; }
+.slot-choice.is-selected small { color: white; }
+.slot-choice:disabled { background: #f1f4f8; color: #65758b; opacity: 1; border-style: dashed; }
+.slot-choice:disabled small { color: #65758b; }
+.slot-empty { margin: 0; font-size: 14px; line-height: 1.7; color: var(--text-muted); }
+@media (max-width: 440px) { .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .slot-choice { font-size: 13px; } }

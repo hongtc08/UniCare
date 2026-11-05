@@ -1,0 +1,25 @@
+.doctor-finder { padding: 24px 14px; }
+.doctor-finder h3 { margin: 0 10px 24px; font-size: 18px; font-weight: 500; }
+.doctor-finder-filters { display: grid; gap: 18px; margin: 0 10px; }
+.doctor-finder .form-field { gap: 8px; }
+.doctor-finder .form-field > span { font-size: 12px; font-weight: 500; }
+.doctor-finder select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #ccd6e7; border-radius: 8px; background: white; color: var(--text-main); font-size: 13px; }
+.doctor-finder select:focus-visible { outline: 2px solid var(--primary-blue); outline-offset: 2px; }
+.facility-list-note { margin-top: -10px; font-size: 12px; line-height: 1.7; color: #596b83; }
+.facility-list-note p { margin: 0; }
+.facility-list-note button { margin-top: 6px; padding: 4px 0; min-height: 32px; background: transparent; border: 0; color: #244fd0; text-decoration: underline; }
+.available-only { display: flex; align-items: center; gap: 8px; min-height: 28px; color: #334b6d; font-size: 12px; cursor: pointer; }
+.available-only input { width: 16px; height: 16px; accent-color: var(--primary-blue); flex-shrink: 0; }
+.doctor-finder-results { border-top: 1px solid var(--border-light); margin-top: 24px; padding-top: 26px; }
+.doctor-finder-results h4 { color: #65758b; margin: 0 10px 12px; font-size: 12px; font-weight: 600; }
+.doctor-finder .doctor-options { gap: 8px; }
+.doctor-finder .doctor-option { gap: 10px; min-height: 76px; padding: 12px 10px; border-radius: 9px; }
+.doctor-finder .doctor-option.is-selected { border-color: #adc1ff; background: #edf2ff; }
+.doctor-finder .doctor-avatar { width: 42px; height: 42px; background: #f4dfbf; color: #875515; font-size: 13px; font-weight: 600; }
+.doctor-finder .doctor-option strong { font-size: 12px; line-height: 1.6; }
+.doctor-finder .doctor-option small { margin-top: 3px; font-size: 11px; }
+.doctor-selection-check { color: var(--primary-blue); flex-shrink: 0; }
+.doctor-finder-hint, .doctor-finder-results > .appointment-muted { margin: 22px 10px 0; font-size: 12px; line-height: 1.8; color: #596b83; }
+.doctor-finder-hint { padding-top: 20px; border-top: 1px solid var(--border-light); }
+@media (min-width: 801px) { .doctor-finder .doctor-options { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .doctor-finder { padding: 22px 12px; } }
