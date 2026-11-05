@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { fromHealthResponse, toHealthRequest } from '../src/utils/healthProfile.js';
-import { getHealthProfileCompletion } from '../src/utils/profileCompletion.js';
-import { calculateBmi } from '../src/utils/bmi.js';
-import { fromInsuranceResponse, toInsuranceRequest, validateInsuranceDraft, getInsuranceStatus } from '../src/utils/insurance.js';
+import { fromHealthResponse, toHealthRequest } from '../src/utils/health-profile/healthProfile.js';
+import { getHealthProfileCompletion } from '../src/utils/health-profile/profileCompletion.js';
+import { calculateBmi } from '../src/utils/health-profile/bmi.js';
+import { fromInsuranceResponse, toInsuranceRequest, validateInsuranceDraft, getInsuranceStatus } from '../src/utils/health-profile/insurance.js';
 
 test('new students receive an empty form, never another student fixture', () => {
   const form = fromHealthResponse(null);

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import { User, KeyRound, ShieldCheck } from "lucide-react";
-import StudentHealthProfile from "./StudentHealthProfile";
+import StudentHealthProfile from "./health-profile/StudentHealthProfile";
 
 const Profile = () => {
   const { user } = useAuth();
