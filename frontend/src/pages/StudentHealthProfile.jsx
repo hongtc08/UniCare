@@ -209,8 +209,6 @@ export default function StudentHealthProfile() {
     const payload = toInsuranceRequest(insuranceDraft, resolvedStudentId);
     const localExtras = {
       socialInsuranceNumber: holderInfo.socialInsuranceNumber,
-      providerCode: (insuranceDraft.providerCode ?? "").trim(),
-      continuousFiveYearsFrom: (insuranceDraft.continuousFiveYearsFrom ?? "").trim(),
       issuedAt: (insuranceDraft.issuedAt ?? "").trim(),
       benefits: insuranceData.benefits,
     };
@@ -245,7 +243,7 @@ export default function StudentHealthProfile() {
       `Số thẻ BHYT: ${insurance.cardNumber || "Chưa cập nhật"}`,
       `Mã BHXH: ${insurance.socialInsuranceNumber || "Chưa cập nhật"}`,
       `Giá trị sử dụng: ${formatInsuranceDate(insurance.validFrom)} - ${formatInsuranceDate(insurance.validUntil)}`,
-      `Nơi ĐK KCB ban đầu: ${insurance.initialProvider || "Chưa cập nhật"}${insurance.providerCode ? ` (${insurance.providerCode})` : ""}`,
+      `Nơi ĐK KCB ban đầu: ${insurance.initialProvider || "Chưa cập nhật"}`,
       `Nơi cấp, đổi thẻ BHYT: ${insurance.issuedAt || "Chưa cập nhật"}`,
     ].join("\n");
     const url = URL.createObjectURL(new Blob(["\ufeff", content], { type: "text/plain;charset=utf-8" }));
@@ -488,24 +486,6 @@ export default function StudentHealthProfile() {
                 value={insuranceDraft.initialProvider}
                 onChange={(e) => setInsuranceDraft({ ...insuranceDraft, initialProvider: e.target.value })}
                 placeholder="VD: Trung tâm Y tế Đại học"
-              />
-            </label>
-            <label className="form-field">
-              <span>Mã cơ sở KCB</span>
-              <input
-                type="text"
-                maxLength={30}
-                value={insuranceDraft.providerCode}
-                onChange={(e) => setInsuranceDraft({ ...insuranceDraft, providerCode: e.target.value })}
-                placeholder="VD: 79 - 036"
-              />
-            </label>
-            <label className="form-field health-full-row">
-              <span>Thời điểm đủ 5 năm liên tục</span>
-              <input
-                type="date"
-                value={insuranceDraft.continuousFiveYearsFrom}
-                onChange={(e) => setInsuranceDraft({ ...insuranceDraft, continuousFiveYearsFrom: e.target.value })}
               />
             </label>
           </fieldset>

@@ -27,8 +27,6 @@ export const insurancePreview = {
   validFrom: "2026-01-01",
   validUntil: "2026-12-31",
   initialProvider: "Trung tâm Y tế Đại học",
-  providerCode: "79 - 036",
-  continuousFiveYearsFrom: "2025-01-01",
   issuedAt: "TP. Hồ Chí Minh",
   benefits: "Được hưởng 80% chi phí khám bệnh, chữa bệnh trong phạm vi được hưởng BHYT (áp dụng tỷ lệ thanh toán một số thuốc, hóa chất, vật tư y tế và dịch vụ kỹ thuật theo quy định của Bộ trưởng Bộ Y tế).\n\nTrong trường hợp điều trị nội trú trái tuyến tại CSKCB tuyến TW sẽ được hưởng 32% (TH trên thẻ có mã nơi sinh sống là K1 hoặc K2 hoặc K3 sẽ được hưởng 80%). CSKCB tuyến tỉnh sẽ được hưởng 48% (TH trên thẻ có mã nơi sinh sống là K1 hoặc K2 hoặc K3 sẽ được hưởng 80%), từ ngày 01/01/2021 sẽ hưởng 80%, CSKCB là bệnh viện tuyến huyện sẽ hưởng 80%.",
 };

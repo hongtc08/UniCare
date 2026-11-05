@@ -34,8 +34,6 @@ export function fromInsuranceResponse(rawData, fallback = {}) {
     validFrom: data?.effectiveDate ?? data?.issueDate ?? data?.validFrom ?? fallback?.validFrom ?? "",
     validUntil: data?.expirationDate ?? data?.validUntil ?? fallback?.validUntil ?? "",
     initialProvider: data?.initialHospital ?? data?.registeredHospital ?? data?.initialProvider ?? fallback?.initialProvider ?? "",
-    providerCode: data?.providerCode ?? fallback?.providerCode ?? "",
-    continuousFiveYearsFrom: data?.continuousFiveYearsFrom ?? fallback?.continuousFiveYearsFrom ?? "",
     issuedAt: data?.issuedAt ?? fallback?.issuedAt ?? "",
     benefits: data?.benefits ?? fallback?.benefits ?? "",
   };
@@ -78,10 +76,6 @@ export function validateInsuranceDraft(draft) {
   }
   if (initialHospital.length > 150) {
     return "Nơi đăng ký khám chữa bệnh ban đầu không được vượt quá 150 ký tự.";
-  }
-  const continuous = (draft.continuousFiveYearsFrom ?? "").trim();
-  if (continuous && !Number.isFinite(calendarDay(continuous))) {
-    return "Thời điểm đủ 5 năm liên tục không hợp lệ.";
   }
   return "";
 }

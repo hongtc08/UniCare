@@ -15,8 +15,7 @@ export default function HealthInsuranceCard({ insurance, onEdit, editing = false
     ["Ngày sinh", date(insurance.dateOfBirth)],
     ["Giới tính", insurance.gender || "Chưa cập nhật"],
     ["Số thẻ BHYT", insurance.cardNumber || "Chưa cập nhật"],
-    ["Nơi ĐK KCB BĐ", `${insurance.initialProvider || "Chưa cập nhật"}${insurance.providerCode ? ` (Mã: ${insurance.providerCode})` : ""}`],
-    ["Thời điểm 5 năm liên tục", date(insurance.continuousFiveYearsFrom)],
+    ["Nơi ĐK KCB BĐ", insurance.initialProvider || "Chưa cập nhật"],
     ["Nơi cấp, đổi thẻ BHYT", insurance.issuedAt || "Chưa cập nhật"],
   ];
   return (
