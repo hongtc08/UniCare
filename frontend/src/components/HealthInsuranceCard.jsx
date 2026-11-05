@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { BadgeCheck, ChevronDown, Pencil, TriangleAlert, UserRound } from "lucide-react";
+import { BadgeCheck, ChevronDown, TriangleAlert, UserRound } from "lucide-react";
 import { formatInsuranceDate as date, getInsuranceStatus } from "../utils/insurance";
 import "./HealthInsuranceCard.css";
 
-export default function HealthInsuranceCard({ insurance, onEdit, editing = false }) {
+// Nội dung quyền lợi cố định, không phụ thuộc dữ liệu cá nhân hoặc phản hồi API.
+const INSURANCE_BENEFITS = "Được hưởng 80% chi phí khám bệnh, chữa bệnh trong phạm vi được hưởng BHYT (áp dụng tỷ lệ thanh toán một số thuốc, hóa chất, vật tư y tế và dịch vụ kỹ thuật theo quy định của Bộ trưởng Bộ Y tế).\n\nTrong trường hợp điều trị nội trú trái tuyến tại CSKCB tuyến TW sẽ được hưởng 32% (TH trên thẻ có mã nơi sinh sống là K1 hoặc K2 hoặc K3 sẽ được hưởng 80%). CSKCB tuyến tỉnh sẽ được hưởng 48% (TH trên thẻ có mã nơi sinh sống là K1 hoặc K2 hoặc K3 sẽ được hưởng 80%), từ ngày 01/01/2021 sẽ hưởng 80%, CSKCB là bệnh viện tuyến huyện sẽ hưởng 80%.";
+
+export default function HealthInsuranceCard({ insurance }) {
   const [now, setNow] = useState(() => new Date());
   const [expanded, setExpanded] = useState(true);
   useEffect(() => {
@@ -38,16 +41,10 @@ export default function HealthInsuranceCard({ insurance, onEdit, editing = false
             </article>
             <section className="insurance-benefits" aria-labelledby="insurance-benefits-heading">
               <h3 id="insurance-benefits-heading">Thông tin quyền lợi:</h3>
-              <p>{insurance.benefits || "Chưa có thông tin quyền lợi từ cơ quan bảo hiểm. Vui lòng liên hệ bộ phận y tế để được hỗ trợ tra cứu."}</p>
+              <p>{INSURANCE_BENEFITS}</p>
             </section>
         </div>
-        {onEdit && !editing && (
-          <div className="insurance-bottom-actions">
-            <button type="button" className="insurance-view-toggle" onClick={onEdit}>
-              <Pencil size={16} aria-hidden="true" />{insurance.cardNumber ? "Chỉnh sửa thẻ BHYT" : "Thêm thẻ BHYT"}
-            </button>
-          </div>
-        )}
+
       </div>
     </section>
   );

@@ -34,7 +34,7 @@ export function fromInsuranceResponse(rawData, fallback = {}) {
     validFrom: data?.effectiveDate ?? data?.issueDate ?? data?.validFrom ?? fallback?.validFrom ?? "",
     validUntil: data?.expirationDate ?? data?.validUntil ?? fallback?.validUntil ?? "",
     initialProvider: data?.initialHospital ?? data?.registeredHospital ?? data?.initialProvider ?? fallback?.initialProvider ?? "",
-    issuedAt: data?.issuedAt ?? fallback?.issuedAt ?? "",
+    issuedAt: data?.issueAt ?? data?.issuedAt ?? fallback?.issuedAt ?? "",
     benefits: data?.benefits ?? fallback?.benefits ?? "",
   };
 }
@@ -45,13 +45,17 @@ export function toInsuranceRequest(draft, studentId) {
   const expirationDate = (draft.validUntil ?? draft.expirationDate ?? "").trim();
   const initialHospital = (draft.initialProvider ?? draft.initialHospital ?? "").trim();
   const parsedStudentId = Number(studentId ?? draft.studentId);
+  if (!Number.isSafeInteger(parsedStudentId) || parsedStudentId <= 0) {
+    throw new Error("Không xác định được sinh viên. Vui lòng tải lại trang hoặc đăng nhập lại.");
+  }
 
   return {
     cardNumber,
-    studentId: Number.isFinite(parsedStudentId) && parsedStudentId > 0 ? parsedStudentId : 1,
+    studentId: parsedStudentId,
     effectiveDate,
     expirationDate,
     initialHospital,
+    issueAt: (draft.issuedAt ?? "").trim(),
   };
 }
 
