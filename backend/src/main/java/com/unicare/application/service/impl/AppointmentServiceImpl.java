@@ -11,6 +11,7 @@ import com.unicare.domain.entity.Appointment;
 import com.unicare.domain.entity.Shift;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.Role;
+import com.unicare.domain.enums.ServiceType;
 import com.unicare.domain.enums.ShiftStatus;
 import com.unicare.domain.repository.AppointmentRepository;
 import com.unicare.domain.repository.ShiftRepository;
@@ -208,6 +209,34 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<AppointmentResponse> getDoctorAppointments(
+            String currentUsername,
+            LocalDate date,
+            ServiceType serviceType,
+            String status) {
+        User currentUser = resolveCurrentUser(currentUsername);
+        if (currentUser.getRole() != Role.NHAN_VIEN_Y_TE) {
+            throw new AccessDeniedException(
+                    "Chỉ tài khoản Bác sĩ / Nhân viên y tế mới có quyền tra cứu danh sách lịch hẹn phụ trách");
+        }
+
+        String normalizedStatus = (status != null && !status.trim().isEmpty()
+                && !"ALL".equalsIgnoreCase(status.trim()))
+                        ? status.trim()
+                        : null;
+
+        List<Appointment> appointments = appointmentRepository.findByStaffIdWithDetails(currentUser.getId());
+
+        return appointments.stream()
+                .filter(a -> date == null || date.equals(a.getShift().getShiftDate()))
+                .filter(a -> serviceType == null || serviceType == a.getShift().getShiftType())
+                .filter(a -> normalizedStatus == null || normalizedStatus.equalsIgnoreCase(a.getStatus()))
+                .map(AppointmentResponse::fromEntity)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public AppointmentResponse getAppointmentById(Long appointmentId, String currentUsername) {
         User currentUser = resolveCurrentUser(currentUsername);
         Appointment appointment = appointmentRepository.findByIdWithDetails(appointmentId)
@@ -216,6 +245,12 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         if (currentUser.getRole() == Role.SINH_VIEN && !appointment.getStudent().getId().equals(currentUser.getId())) {
             throw new AccessDeniedException("Sinh viên chỉ được phép xem thông tin lịch hẹn của chính mình");
+        }
+
+        if (currentUser.getRole() == Role.NHAN_VIEN_Y_TE
+                && !appointment.getShift().getStaff().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException(
+                    "Bác sĩ chỉ được phép xem thông tin lịch hẹn thuộc ca khám do mình phụ trách");
         }
 
         return AppointmentResponse.fromEntity(appointment);
@@ -237,7 +272,15 @@ public class AppointmentServiceImpl implements AppointmentService {
             return ACTOR_STUDENT;
         }
 
-        if (currentUser.getRole() == Role.NHAN_VIEN_Y_TE || currentUser.getRole() == Role.BAN_QUAN_LY) {
+        if (currentUser.getRole() == Role.NHAN_VIEN_Y_TE) {
+            if (!appointment.getShift().getStaff().getId().equals(currentUser.getId())) {
+                throw new AccessDeniedException(
+                        "Bác sĩ chỉ được phép " + actionName + " lịch hẹn thuộc ca khám do mình phụ trách");
+            }
+            return ACTOR_DOCTOR;
+        }
+
+        if (currentUser.getRole() == Role.BAN_QUAN_LY) {
             return ACTOR_DOCTOR;
         }
 

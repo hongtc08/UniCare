@@ -3,7 +3,9 @@ package com.unicare.application.service;
 import com.unicare.application.dto.request.CancelAppointmentRequest;
 import com.unicare.application.dto.request.RescheduleAppointmentRequest;
 import com.unicare.application.dto.response.AppointmentResponse;
+import com.unicare.domain.enums.ServiceType;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -41,6 +43,22 @@ public interface AppointmentService {
     List<AppointmentResponse> getStudentAppointments(String currentUsername, String status);
 
     /**
+     * Lấy danh sách lịch hẹn thuộc phạm vi phụ trách của Bác sĩ / Chuyên gia đang đăng nhập.
+     *
+     * @param currentUsername Tên đăng nhập của bác sĩ
+     * @param date            Ngày khám cần lọc (tùy chọn)
+     * @param serviceType     Loại dịch vụ cần lọc: KHAM_DA_KHOA hoặc TU_VAN_TAM_LY (tùy chọn)
+     * @param status          Trạng thái lịch hẹn cần lọc (CONFIRMED, COMPLETED, CANCELED, NO_SHOW, ALL hoặc null)
+     * @return Danh sách lịch hẹn kèm thông tin sinh viên và triệu chứng ban đầu
+     */
+    List<AppointmentResponse> getDoctorAppointments(
+            String currentUsername,
+            LocalDate date,
+            ServiceType serviceType,
+            String status
+    );
+
+    /**
      * Lấy chi tiết lịch hẹn theo ID.
      *
      * @param appointmentId   ID của lịch hẹn
@@ -49,4 +67,3 @@ public interface AppointmentService {
      */
     AppointmentResponse getAppointmentById(Long appointmentId, String currentUsername);
 }
-

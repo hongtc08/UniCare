@@ -57,11 +57,14 @@ class AppointmentServiceImplTest {
     private User studentUser;
     private User otherStudentUser;
     private User doctorUser;
+    private User otherDoctorUser;
+    private User adminUser;
     private Student student;
     private MedicalStaff medicalStaff;
     private Shift currentShift;
     private Shift targetShift;
     private Appointment appointment;
+    private LocalDate futureDate;
 
     @BeforeEach
     void setUp() {
@@ -89,6 +92,22 @@ class AppointmentServiceImplTest {
                 .status(UserStatus.ACTIVE)
                 .build();
 
+        otherDoctorUser = User.builder()
+                .id(21L)
+                .username("bs002")
+                .fullName("BS. Phạm Khác Ca")
+                .role(Role.NHAN_VIEN_Y_TE)
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        adminUser = User.builder()
+                .id(1L)
+                .username("admin01")
+                .fullName("Quản Trị Viên")
+                .role(Role.BAN_QUAN_LY)
+                .status(UserStatus.ACTIVE)
+                .build();
+
         student = Student.builder()
                 .id(10L)
                 .user(studentUser)
@@ -103,7 +122,7 @@ class AppointmentServiceImplTest {
                 .specialty("Nội tổng quát")
                 .build();
 
-        LocalDate futureDate = LocalDate.now().plusDays(2);
+        futureDate = LocalDate.now().plusDays(2);
         currentShift = Shift.builder()
                 .id(101L)
                 .staff(medicalStaff)
@@ -170,7 +189,7 @@ class AppointmentServiceImplTest {
     }
 
     @Test
-    @DisplayName("Hủy lịch hẹn thành công bởi Bác sĩ: canceledBy là DOCTOR")
+    @DisplayName("Hủy lịch hẹn thành công bởi Bác sĩ phụ trách ca khám: canceledBy là DOCTOR")
     void cancelAppointment_Success_ByDoctor() {
         when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
         when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
@@ -183,6 +202,36 @@ class AppointmentServiceImplTest {
         assertThat(response).isNotNull();
         assertThat(response.getStatus()).isEqualTo("CANCELED");
         assertThat(response.getCanceledBy()).isEqualTo("DOCTOR");
+    }
+
+    @Test
+    @DisplayName("Hủy lịch hẹn thành công bởi Quản trị viên (BAN_QUAN_LY)")
+    void cancelAppointment_Success_ByAdmin() {
+        when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+        when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
+        when(shiftRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(currentShift));
+        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(i -> i.getArgument(0));
+
+        CancelAppointmentRequest request = new CancelAppointmentRequest("Ban quản lý điều chỉnh lịch");
+        AppointmentResponse response = appointmentService.cancelAppointment(1L, request, "admin01");
+
+        assertThat(response.getStatus()).isEqualTo("CANCELED");
+        assertThat(response.getCanceledBy()).isEqualTo("DOCTOR");
+    }
+
+    @Test
+    @DisplayName("Hủy lịch hẹn: Chặn khi Bác sĩ không phải người phụ trách ca khám của lịch hẹn")
+    void cancelAppointment_AccessDenied_WhenDoctorNotAssignedToShift() {
+        when(userRepository.findByUsername("bs002")).thenReturn(Optional.of(otherDoctorUser));
+        when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
+
+        CancelAppointmentRequest request = new CancelAppointmentRequest("Hủy nhầm ca của bác sĩ khác");
+        assertThatThrownBy(() -> appointmentService.cancelAppointment(1L, request, "bs002"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Bác sĩ chỉ được phép hủy lịch hẹn thuộc ca khám do mình phụ trách");
+
+        verify(shiftRepository, never()).findByIdForUpdate(any());
+        verify(appointmentRepository, never()).save(any());
     }
 
     @Test
@@ -277,7 +326,7 @@ class AppointmentServiceImplTest {
     }
 
     @Test
-    @DisplayName("Dời lịch hẹn thành công bởi Bác sĩ: ca mới chưa đầy vẫn giữ trạng thái OPEN")
+    @DisplayName("Dời lịch hẹn thành công bởi Bác sĩ phụ trách: ca mới chưa đầy vẫn giữ trạng thái OPEN")
     void rescheduleAppointment_Success_ByDoctor() {
         targetShift.setBookedSlots(2);
         targetShift.setMaxSlots(5);
@@ -295,6 +344,21 @@ class AppointmentServiceImplTest {
         assertThat(response.getCanceledBy()).isEqualTo("DOCTOR");
         assertThat(targetShift.getBookedSlots()).isEqualTo(3);
         assertThat(targetShift.getStatus()).isEqualTo(ShiftStatus.OPEN);
+    }
+
+    @Test
+    @DisplayName("Dời lịch hẹn: Chặn khi Bác sĩ không phải người phụ trách ca khám hiện tại")
+    void rescheduleAppointment_AccessDenied_WhenDoctorNotAssignedToShift() {
+        when(userRepository.findByUsername("bs002")).thenReturn(Optional.of(otherDoctorUser));
+        when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
+
+        RescheduleAppointmentRequest request = new RescheduleAppointmentRequest(102L, "Dời ca của bác sĩ khác");
+        assertThatThrownBy(() -> appointmentService.rescheduleAppointment(1L, request, "bs002"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Bác sĩ chỉ được phép dời lịch hẹn thuộc ca khám do mình phụ trách");
+
+        verify(shiftRepository, never()).findByIdForUpdate(any());
+        verify(appointmentRepository, never()).save(any());
     }
 
     @Test
@@ -369,7 +433,7 @@ class AppointmentServiceImplTest {
     }
 
     // =========================================================================
-    // 3. Tests for getStudentAppointments & getAppointmentById
+    // 3. Tests for getStudentAppointments, getDoctorAppointments & getAppointmentById
     // =========================================================================
 
     @Test
@@ -387,7 +451,7 @@ class AppointmentServiceImplTest {
     }
 
     @Test
-    @DisplayName("Lấy danh sách lịch hẹn: Chặn truy cập khi người dùng không phải sinh viên")
+    @DisplayName("Lấy danh sách lịch hẹn của sinh viên: Chặn truy cập khi người dùng không phải sinh viên")
     void getStudentAppointments_AccessDenied_WhenNotStudent() {
         when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
 
@@ -396,7 +460,52 @@ class AppointmentServiceImplTest {
     }
 
     @Test
-    @DisplayName("Lấy chi tiết lịch hẹn: Thành công cho chính chủ và chặn người khác")
+    @DisplayName("Lấy danh sách lịch hẹn của Bác sĩ: lọc theo ngày, loại dịch vụ, trạng thái và trả về thông tin SV + triệu chứng")
+    void getDoctorAppointments_Success_WithFilters() {
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(appointmentRepository.findByStaffIdWithDetails(20L)).thenReturn(List.of(appointment));
+
+        // Không truyền bộ lọc
+        List<AppointmentResponse> all = appointmentService.getDoctorAppointments("bs001", null, null, null);
+        assertThat(all).hasSize(1);
+        assertThat(all.get(0).getStudentName()).isEqualTo("Nguyễn Văn Sinh Viên");
+        assertThat(all.get(0).getStudentCode()).isEqualTo("SV20260001");
+        assertThat(all.get(0).getReasonSymptoms()).isEqualTo("Đau bụng sốt nhẹ");
+
+        // Khớp tất cả bộ lọc (date, serviceType, status)
+        List<AppointmentResponse> matched = appointmentService.getDoctorAppointments(
+                "bs001", futureDate, ServiceType.KHAM_DA_KHOA, "CONFIRMED");
+        assertThat(matched).hasSize(1);
+
+        // Truyền status = ALL hoặc chuỗi rỗng
+        assertThat(appointmentService.getDoctorAppointments("bs001", futureDate, null, "ALL")).hasSize(1);
+        assertThat(appointmentService.getDoctorAppointments("bs001", null, null, "   ")).hasSize(1);
+
+        // Không khớp ngày
+        assertThat(appointmentService.getDoctorAppointments(
+                "bs001", futureDate.plusDays(5), null, null)).isEmpty();
+
+        // Không khớp dịch vụ
+        assertThat(appointmentService.getDoctorAppointments(
+                "bs001", null, ServiceType.TU_VAN_TAM_LY, null)).isEmpty();
+
+        // Không khớp trạng thái
+        assertThat(appointmentService.getDoctorAppointments(
+                "bs001", null, null, "CANCELED")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Lấy danh sách lịch hẹn của Bác sĩ: Chặn truy cập khi người dùng không phải Bác sĩ")
+    void getDoctorAppointments_AccessDenied_WhenNotDoctor() {
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+
+        assertThatThrownBy(() -> appointmentService.getDoctorAppointments("sv001", null, null, null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Chỉ tài khoản Bác sĩ / Nhân viên y tế mới có quyền tra cứu");
+    }
+
+    @Test
+    @DisplayName("Lấy chi tiết lịch hẹn: Thành công cho chính chủ / bác sĩ phụ trách và chặn người khác")
     void getAppointmentById_Success_And_Errors() {
         when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
         when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
@@ -404,6 +513,17 @@ class AppointmentServiceImplTest {
         AppointmentResponse response = appointmentService.getAppointmentById(1L, "sv001");
         assertThat(response).isNotNull();
         assertThat(response.getId()).isEqualTo(1L);
+
+        // Bác sĩ phụ trách xem -> Thành công
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        AppointmentResponse docResponse = appointmentService.getAppointmentById(1L, "bs001");
+        assertThat(docResponse.getId()).isEqualTo(1L);
+
+        // Bác sĩ khác ca xem -> AccessDeniedException
+        when(userRepository.findByUsername("bs002")).thenReturn(Optional.of(otherDoctorUser));
+        assertThatThrownBy(() -> appointmentService.getAppointmentById(1L, "bs002"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Bác sĩ chỉ được phép xem thông tin lịch hẹn thuộc ca khám do mình phụ trách");
 
         // Sinh viên khác xem -> AccessDeniedException
         when(userRepository.findByUsername("sv002")).thenReturn(Optional.of(otherStudentUser));
