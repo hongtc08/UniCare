@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronRight, Download, Pencil } from "lucide-react";
 import { Link } from "react-router-dom";
-import { getHealthProfileCompletion } from "../utils/profileCompletion";
+import { getHealthProfileCompletion } from "../../utils/health-profile/profileCompletion";
 import "./StudentHealthProfile.css";
-import BmiMeter from "../components/BmiMeter";
-import HealthInsuranceCard from "../components/HealthInsuranceCard";
-import Modal from "../components/Modal";
-import { useAuth } from "../hooks/useAuth";
-import { healthProfileApi } from "../api/healthProfileApi";
-import { fromHealthResponse, toHealthRequest } from "../utils/healthProfile";
+import BmiMeter from "../../components/health-profile/BmiMeter";
+import HealthInsuranceCard from "../../components/health-profile/HealthInsuranceCard";
+import Modal from "../../components/Modal";
+import { useAuth } from "../../hooks/useAuth";
+import { healthProfileApi } from "../../api/healthProfileApi";
+import { fromHealthResponse, toHealthRequest } from "../../utils/health-profile/healthProfile";
 import {
   formatInsuranceDate,
   fromInsuranceResponse,
   toInsuranceRequest,
   validateInsuranceDraft,
-} from "../utils/insurance";
-import { readSession } from "../utils/session";
+} from "../../utils/health-profile/insurance";
+import { readSession } from "../../utils/session";
 
 const initialProfile = fromHealthResponse(null);
 const initialInsurance = fromInsuranceResponse(null);

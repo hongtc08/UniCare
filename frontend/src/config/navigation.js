@@ -4,6 +4,8 @@ export const navigation = {
   SINH_VIEN: [
     { to: "/dashboard", label: "Bảng điều khiển", icon: LayoutDashboard },
     { to: "/profile", label: "Hồ sơ sức khỏe", icon: Heart },
+    { to: "/lich-kham", label: "Đặt lịch khám", icon: CalendarRange },
+    { to: "/lich-hen-cua-toi", label: "Lịch hẹn của tôi", icon: Clock },
     { to: "/mental-health", label: "Sức khỏe tinh thần", icon: Activity },
     { to: "/health-knowledge", label: "Kiến thức sức khỏe", icon: BookOpen },
   ],

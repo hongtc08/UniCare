@@ -1,0 +1,29 @@
+.booking-summary { padding: 0 22px 22px; }
+.booking-summary-heading { margin: 0 -22px 18px; padding: 22px 22px 20px; border-bottom: 1px solid var(--border-light); }
+.booking-summary .booking-summary-heading h3 { margin: 0 0 18px; font-size: 18px; font-weight: 500; }
+.booking-summary-heading p { color: #596e8d; font-size: 12px; line-height: 1.6; margin: 0; }
+.summary-doctor { display: flex; align-items: center; gap: 12px; padding: 16px 12px; background: #f5f7fa; border-radius: 9px; margin-bottom: 20px; }
+.summary-doctor-avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: #f4dfbf; color: #875515; font-size: 12px; flex-shrink: 0; }
+.summary-doctor strong { font-size: 13px; line-height: 1.6; font-weight: 600; }
+.summary-doctor small { display: block; margin-top: 6px; color: #596e8d; font-size: 11px; }
+.summary-doctor-placeholder { margin: 0 0 20px; font-size: 13px; line-height: 1.7; color: #596e8d; }
+.booking-summary .form-field { gap: 8px; }
+.booking-summary .form-field > span { font-size: 12px; font-weight: 500; }
+.summary-service select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #ccd6e7; border-radius: 8px; background: white; font-size: 13px; color: var(--text-main); }
+.summary-slots { margin-top: 20px; }
+.summary-slots-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: 12px; color: #334b6d; }
+.summary-slots-heading strong { font-size: 12px; font-weight: 600; color: #297345; }
+.booking-summary .slot-picker.is-compact { margin-top: 0; }
+.is-compact legend { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.booking-summary .is-compact .slot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.is-compact .slot-choice { min-height: 40px; flex-direction: row; gap: 5px; padding: 8px 4px; font-size: 12px; font-weight: 400; }
+.is-compact .slot-choice:disabled { border-style: solid; }
+.summary-selected-slot { margin: 12px 0 0; font-size: 12px; line-height: 1.6; color: #596e8d; }
+.summary-notes { margin-top: 20px; }
+.summary-notes textarea { width: 100%; min-height: 100px; padding: 12px; border: 1px solid #ccd6e7; border-radius: 8px; font-size: 13px; line-height: 1.7; resize: vertical; }
+.summary-final-details { margin-top: 18px; font-size: 13px; color: #596e8d; }
+.booking-summary .booking-summary-actions { margin-top: 20px; }
+.booking-summary .booking-summary-actions .button { width: 100%; min-height: 46px; }
+.booking-summary .booking-privacy { font-size: 11px; align-items: flex-start; text-align: center; line-height: 1.7; margin-top: 16px; }
+.booking-summary .booking-privacy svg { flex-shrink: 0; margin-top: 1px; }
+@media (max-width: 480px) { .booking-panel.booking-summary { padding: 0 20px 22px; } .booking-summary-heading { padding-inline: 20px; margin-inline: -20px; } }

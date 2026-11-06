@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BadgeCheck, ChevronDown, TriangleAlert, UserRound } from "lucide-react";
-import { formatInsuranceDate as date, getInsuranceStatus } from "../utils/insurance";
+import { formatInsuranceDate as date, getInsuranceStatus } from "../../utils/health-profile/insurance";
 import "./HealthInsuranceCard.css";
 
 // Nội dung quyền lợi cố định, không phụ thuộc dữ liệu cá nhân hoặc phản hồi API.

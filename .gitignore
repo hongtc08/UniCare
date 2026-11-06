@@ -50,3 +50,6 @@ frontend/.env.*.local
 # Vite cache
 .vite/
 frontend/.vite/
+
+# Local design inspection artifacts and screenshots
+.taste-skill/

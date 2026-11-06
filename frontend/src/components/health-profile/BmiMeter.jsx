@@ -1,5 +1,5 @@
 import { Activity, Check, Info } from "lucide-react";
-import { BMI_CATEGORIES, calculateBmi } from "../utils/bmi";
+import { BMI_CATEGORIES, calculateBmi } from "../../utils/health-profile/bmi";
 import "./BmiMeter.css";
 
 export default function BmiMeter({ height, weight, saved = false }) {
