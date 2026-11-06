@@ -22,12 +22,12 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Dùng chung cho STUDENT và DOCTOR
@@ -40,6 +40,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     private static final String ACTOR_STUDENT = "STUDENT";
     private static final String ACTOR_DOCTOR = "DOCTOR";
     private static final DateTimeFormatter CODE_DATE_FORMAT = DateTimeFormatter.ofPattern("yyMMdd");
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final AppointmentRepository appointmentRepository;
     private final ShiftRepository shiftRepository;
@@ -359,7 +360,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         String datePart = LocalDate.now().format(CODE_DATE_FORMAT);
         String code;
         do {
-            int randomSuffix = ThreadLocalRandom.current().nextInt(1, 10000);
+            int randomSuffix = SECURE_RANDOM.nextInt(9999) + 1;
             code = "LH" + datePart + String.format("%04d", randomSuffix);
         } while (appointmentRepository.findByAppointmentCode(code).isPresent());
         return code;
