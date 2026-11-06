@@ -16,10 +16,9 @@ import {
   validateInsuranceDraft,
 } from "../utils/insurance";
 import { readSession } from "../utils/session";
-import { studentPreview, insurancePreview, healthRecordPreview } from "../data/healthProfilePreview";
 
-const initialProfile = fromHealthResponse(healthRecordPreview);
-const initialInsurance = fromInsuranceResponse(insurancePreview);
+const initialProfile = fromHealthResponse(null);
+const initialInsurance = fromInsuranceResponse(null);
 const bloodGroups = ["A", "B", "AB", "O"];
 const labels = { height: "Chiều cao", weight: "Cân nặng", bloodGroup: "Nhóm máu", allergies: "Dị ứng", conditions: "Bệnh nền", vaccinations: "Tiêm chủng" };
 
@@ -27,9 +26,20 @@ function Detail({ label, children }) {
   return <div className="health-detail"><dt>{label}</dt><dd>{children || "Chưa cập nhật"}</dd></div>;
 }
 
+function requestError(failure, fallback) {
+  if (failure?.response?.data?.message) return failure.response.data.message;
+  if (failure?.code === "ECONNABORTED") return "API phản hồi quá chậm. Vui lòng thử lại.";
+  if (!failure?.response && failure?.request) return "Không kết nối được API. Kiểm tra backend ở cổng 8080 và địa chỉ frontend được phép truy cập.";
+  if (failure?.response?.status === 404) return "Không tìm thấy API. Hãy khởi động lại backend để nạp mã nguồn mới.";
+  return failure?.message || fallback;
+}
+
 export default function StudentHealthProfile() {
   const { user, updateIdentity } = useAuth();
-  const baseStudent = { ...studentPreview, ...Object.fromEntries(Object.entries(user || {}).filter(([, value]) => value != null && value !== "")) };
+  const [personalInfo, setPersonalInfo] = useState(null);
+  const [personalInfoError, setPersonalInfoError] = useState("");
+  const [savingHolder, setSavingHolder] = useState(false);
+  const baseStudent = personalInfo ?? { fullName: user?.fullName, username: user?.username };
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -37,17 +47,19 @@ export default function StudentHealthProfile() {
   const [profile, setProfile] = useState(initialProfile);
   const [draft, setDraft] = useState(initialProfile);
   const [editing, setEditing] = useState(false);
-  const [updatedAt, setUpdatedAt] = useState(healthRecordPreview.updatedAt);
+  const [updatedAt, setUpdatedAt] = useState(null);
   const [message, setMessage] = useState("");
   const editButton = useRef(null);
 
-  // State cho card "Thông tin bảo hiểm" (6 trường hành chính trong card)
+  // Thông tin cá nhân được tải và lưu qua /health-profile/personal-info.
   const [holderInfo, setHolderInfo] = useState(() => ({
     fullName: baseStudent?.fullName || user?.fullName || user?.username || "",
-    socialInsuranceNumber: initialInsurance.socialInsuranceNumber,
+    socialInsuranceNumber: "",
     dateOfBirth: baseStudent.dateOfBirth || "",
     identityNumber: baseStudent.identityNumber || "",
     phone: baseStudent.phone || "",
+    gender: baseStudent.gender || "",
+    email: baseStudent.email || "",
     address: baseStudent.address || "",
   }));
   const [holderDraft, setHolderDraft] = useState(holderInfo);
@@ -60,6 +72,7 @@ export default function StudentHealthProfile() {
   const [editingInsurance, setEditingInsurance] = useState(false);
   const [savingInsurance, setSavingInsurance] = useState(false);
   const [insuranceError, setInsuranceError] = useState("");
+  const [insuranceLoadError, setInsuranceLoadError] = useState("");
 
   const student = {
     ...baseStudent,
@@ -73,9 +86,8 @@ export default function StudentHealthProfile() {
   const name = student?.fullName || "Chưa cập nhật";
   const initials = name.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join("");
   const insurance = {
-    ...studentPreview,
     ...insuranceData,
-    socialInsuranceNumber: holderInfo.socialInsuranceNumber,
+    socialInsuranceNumber: insuranceData.socialInsuranceNumber,
     fullName: name,
     phone: student.phone,
     dateOfBirth: student.dateOfBirth,
@@ -87,33 +99,58 @@ export default function StudentHealthProfile() {
     Promise.allSettled([
       healthProfileApi.get(controller.signal),
       healthProfileApi.getInsurance(controller.signal),
+      healthProfileApi.getPersonalInfo(controller.signal),
     ])
-      .then(([healthResult, insuranceResult]) => {
+      .then(([healthResult, insuranceResult, personalResult]) => {
         if (controller.signal.aborted) return;
-        if (healthResult.status === "fulfilled") {
+        if (personalResult.status === "fulfilled" && personalResult.value?.data && personalResult.value.success !== false) {
+          const info = personalResult.value.data;
+          setPersonalInfo(info);
+          setHolderInfo((prev) => ({
+            ...prev,
+            fullName: info.fullName ?? "",
+            dateOfBirth: info.dateOfBirth ?? "",
+            phone: info.phoneNumber ?? info.phone ?? "",
+            gender: info.gender ?? "",
+            email: info.email ?? "",
+          }));
+          setPersonalInfoError("");
+          updateIdentity(info);
+          setInsuranceData((prev) => ({ ...prev, studentId: info.studentId }));
+        } else {
+          setPersonalInfoError(requestError(personalResult.reason, "Không tải được thông tin cá nhân. Bạn vẫn có thể nhập và thử lưu."));
+        }
+        if (healthResult.status === "fulfilled" && healthResult.value?.success !== false) {
           const health = healthResult.value;
-          const source = health.data ?? healthRecordPreview;
+          const source = health.data;
           setProfile(fromHealthResponse(source));
-          setUpdatedAt(source?.updatedAt ?? healthRecordPreview.updatedAt);
-          if (health.data?.username) updateIdentity(health.data);
+          setUpdatedAt(source?.updatedAt ?? null);
           if (health.data?.studentId) {
             setInsuranceData((prev) => ({ ...prev, studentId: health.data.studentId }));
           }
         } else {
-          setProfile(fromHealthResponse(healthRecordPreview));
-          setUpdatedAt(healthRecordPreview.updatedAt);
+          setProfile(fromHealthResponse(null));
+          setUpdatedAt(null);
+          setError("Không tải được hồ sơ sức khỏe. Vui lòng tải lại trang để thử lại.");
         }
 
-        if (insuranceResult.status === "fulfilled") {
+        if (insuranceResult.status === "fulfilled" && insuranceResult.value?.success !== false) {
           const raw = insuranceResult.value?.data;
           const record = Array.isArray(raw) ? raw[0] : raw;
           if (record) {
-            setInsuranceData((prev) => fromInsuranceResponse(record, prev));
+            setInsuranceData(fromInsuranceResponse(record));
           }
+        } else {
+          setInsuranceLoadError(requestError(insuranceResult.reason, "Không tải được thẻ BHYT. Bạn vẫn có thể nhập thông tin và thử lưu thẻ."));
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
+      })
+      .catch((failure) => {
+        if (!controller.signal.aborted) {
+          setError(requestError(failure, "Không xử lý được dữ liệu hồ sơ. Vui lòng thử lại."));
+        }
       });
     return () => controller.abort();
   }, [reload, updateIdentity]);
@@ -135,15 +172,13 @@ export default function StudentHealthProfile() {
     const payload = toHealthRequest(draft);
     try {
       const response = await healthProfileApi.save(payload);
+      if (!response?.data || response.success === false) throw new Error("Không nhận được hồ sơ sức khỏe đã lưu.");
       setProfile(fromHealthResponse(response.data));
       setUpdatedAt(response.data?.updatedAt ?? new Date().toISOString());
       setMessage("Đã lưu hồ sơ sức khỏe.");
       finish();
-    } catch {
-      setProfile(fromHealthResponse(payload));
-      setUpdatedAt(new Date().toISOString());
-      setMessage("Đã lưu hồ sơ sức khỏe (dữ liệu mẫu tạm thời).");
-      finish();
+    } catch (failure) {
+      setError(failure.response?.data?.message || failure.message || "Không lưu được hồ sơ sức khỏe. Vui lòng thử lại.");
     } finally {
       setSaving(false);
     }
@@ -158,33 +193,47 @@ export default function StudentHealthProfile() {
     setEditingHolder(false);
     requestAnimationFrame(() => editHolderButton.current?.focus());
   }
-  function saveHolder(event) {
+  async function saveHolder(event) {
     event.preventDefault();
-    const cleaned = {
-      fullName: holderDraft.fullName.trim() || name,
-      socialInsuranceNumber: holderDraft.socialInsuranceNumber.trim(),
-      dateOfBirth: holderDraft.dateOfBirth.trim(),
-      identityNumber: holderDraft.identityNumber.trim(),
-      phone: holderDraft.phone.trim(),
-      address: holderDraft.address.trim(),
+    const payload = {
+      fullName: holderDraft.fullName.trim(),
+      dateOfBirth: holderDraft.dateOfBirth || null,
+      phoneNumber: holderDraft.phone.trim(),
+      gender: holderDraft.gender.trim(),
+      email: holderDraft.email.trim(),
     };
-    setHolderInfo(cleaned);
-    setInsuranceData((prev) => ({ ...prev, socialInsuranceNumber: cleaned.socialInsuranceNumber }));
-    setMessage("Đã cập nhật thông tin bảo hiểm.");
-    finishHolder();
+    setSavingHolder(true);
+    setPersonalInfoError("");
+    try {
+      const response = await healthProfileApi.savePersonalInfo(payload);
+      if (!response?.data || response.success === false) throw new Error("Không nhận được thông tin cá nhân đã lưu.");
+      const info = response.data;
+      setPersonalInfo(info);
+      setInsuranceData((prev) => ({ ...prev, studentId: info.studentId ?? prev.studentId }));
+      setHolderInfo((prev) => ({ ...prev, fullName: info.fullName ?? "", dateOfBirth: info.dateOfBirth ?? "", phone: info.phoneNumber ?? info.phone ?? "", gender: info.gender ?? "", email: info.email ?? "" }));
+      updateIdentity(info);
+      setMessage("Đã lưu thông tin cá nhân.");
+      finishHolder();
+    } catch (failure) {
+      setPersonalInfoError(requestError(failure, "Không lưu được thông tin cá nhân. Vui lòng thử lại."));
+    } finally {
+      setSavingHolder(false);
+    }
   }
 
   function openInsuranceModal() {
+    editHolder();
     setInsuranceDraft({
       ...insuranceData,
-      socialInsuranceNumber: holderInfo.socialInsuranceNumber,
+      socialInsuranceNumber: insuranceData.socialInsuranceNumber,
     });
     setInsuranceError("");
     setMessage("");
     setEditingInsurance(true);
   }
   function closeInsuranceModal() {
-    if (savingInsurance) return;
+    if (savingInsurance || savingHolder) return;
+    finishHolder();
     setEditingInsurance(false);
     setInsuranceError("");
   }
@@ -200,36 +249,22 @@ export default function StudentHealthProfile() {
     setMessage("");
 
     const resolvedStudentId =
+      personalInfo?.studentId ??
       insuranceData.studentId ??
       user?.userId ??
       user?.id ??
-      readSession()?.userId ??
-      1;
-
-    const payload = toInsuranceRequest(insuranceDraft, resolvedStudentId);
-    const localExtras = {
-      socialInsuranceNumber: holderInfo.socialInsuranceNumber,
-      providerCode: (insuranceDraft.providerCode ?? "").trim(),
-      continuousFiveYearsFrom: (insuranceDraft.continuousFiveYearsFrom ?? "").trim(),
-      issuedAt: (insuranceDraft.issuedAt ?? "").trim(),
-      benefits: insuranceData.benefits,
-    };
+      readSession()?.userId;
 
     try {
+      const payload = toInsuranceRequest(insuranceDraft, resolvedStudentId);
       const response = await healthProfileApi.saveInsurance(payload, insuranceData.id);
-      setInsuranceData(fromInsuranceResponse(response.data ?? payload, { ...insuranceData, ...localExtras }));
+      if (!response?.data || response.success === false) throw new Error("Không nhận được thông tin thẻ BHYT đã lưu.");
+      setInsuranceData(fromInsuranceResponse(response.data));
+      setInsuranceLoadError("");
       setMessage("Đã lưu thông tin thẻ BHYT.");
       setEditingInsurance(false);
     } catch (failure) {
-      // Nếu BE trả lỗi nghiệp vụ cụ thể (400/409) thì hiển thị trên modal, còn nếu chưa có API (404/500/network) thì lưu tạm trên UI
-      const status = failure?.response?.status;
-      if (status === 400 || status === 409) {
-        setInsuranceError(failure.response?.data?.message || "Dữ liệu thẻ BHYT không hợp lệ.");
-      } else {
-        setInsuranceData(fromInsuranceResponse(payload, { ...insuranceData, ...localExtras }));
-        setMessage("Đã lưu thông tin thẻ BHYT (dữ liệu mẫu tạm thời).");
-        setEditingInsurance(false);
-      }
+      setInsuranceError(requestError(failure, "Không lưu được thẻ BHYT. Vui lòng thử lại."));
     } finally {
       setSavingInsurance(false);
     }
@@ -245,7 +280,7 @@ export default function StudentHealthProfile() {
       `Số thẻ BHYT: ${insurance.cardNumber || "Chưa cập nhật"}`,
       `Mã BHXH: ${insurance.socialInsuranceNumber || "Chưa cập nhật"}`,
       `Giá trị sử dụng: ${formatInsuranceDate(insurance.validFrom)} - ${formatInsuranceDate(insurance.validUntil)}`,
-      `Nơi ĐK KCB ban đầu: ${insurance.initialProvider || "Chưa cập nhật"}${insurance.providerCode ? ` (${insurance.providerCode})` : ""}`,
+      `Nơi ĐK KCB ban đầu: ${insurance.initialProvider || "Chưa cập nhật"}`,
       `Nơi cấp, đổi thẻ BHYT: ${insurance.issuedAt || "Chưa cập nhật"}`,
     ].join("\n");
     const url = URL.createObjectURL(new Blob(["\ufeff", content], { type: "text/plain;charset=utf-8" }));
@@ -299,10 +334,10 @@ export default function StudentHealthProfile() {
             {editing ? (
               <form className="health-form" onSubmit={save}>
                 <fieldset className="health-form-grid" disabled={saving}>
-                  {[{ key: "height", unit: "cm", min: 0.1, max: 300 }, { key: "weight", unit: "kg", min: 0.1, max: 500 }].map(({ key, unit, min, max }, index) => (
+                  {[{ key: "height", unit: "cm", min: 0.1, max: 300 }, { key: "weight", unit: "kg", min: 0.1, max: 500 }].map(({ key, unit, min, max }) => (
                     <label className="form-field" key={key}>
                       <span>{labels[key]} ({unit}) <span className="required">*</span></span>
-                      <input autoFocus={index === 0} type="number" required min={min} max={max} step="0.1" value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} aria-describedby={`${key}-hint`} />
+                      <input type="number" required min={min} max={max} step="0.1" value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} aria-describedby={`${key}-hint`} />
                       <small id={`${key}-hint`}>Từ {min} đến {max} {unit}.</small>
                     </label>
                   ))}
@@ -328,37 +363,49 @@ export default function StudentHealthProfile() {
           <section className="data-panel health-insurance" aria-labelledby="insurance-heading">
             <div className="panel-heading">
               <div>
-                <h2 id="insurance-heading">{editingHolder ? "Chỉnh sửa thông tin bảo hiểm" : "Thông tin bảo hiểm"}</h2>
+                <h2 id="insurance-heading">Thông tin cá nhân và bảo hiểm</h2>
               </div>
-              {!editingHolder && (
-                <button ref={editHolderButton} className="health-edit-link" disabled={loading} onClick={editHolder}>
-                  <Pencil size={14} aria-hidden="true" />Chỉnh sửa
-                </button>
-              )}
+              <button ref={editHolderButton} type="button" className="health-edit-link" disabled={loading || savingHolder || savingInsurance} onClick={openInsuranceModal}>
+                <Pencil size={14} aria-hidden="true" />Cập nhật
+              </button>
             </div>
-            {editingHolder ? (
+            {personalInfoError && <p role="alert" className="feedback feedback-error">{personalInfoError}</p>}
+              <dl className="health-details-grid">
+                <Detail label="Họ tên">{name}</Detail>
+                <Detail label="Mã BHXH">{insurance?.socialInsuranceNumber}</Detail>
+                <Detail label="Ngày sinh">{student?.dateOfBirth ? formatInsuranceDate(student.dateOfBirth) : null}</Detail>
+                <Detail label="ĐDCN/CCCD/Hộ chiếu">{student?.identityNumber}</Detail>
+                <Detail label="Số điện thoại">{student?.phone}</Detail>
+                <Detail label="Địa chỉ">{student?.address}</Detail>
+              </dl>
+
+            {insuranceLoadError && <p role="alert" className="feedback feedback-error">{insuranceLoadError}</p>}
+            <div className="insurance-toggle-list">
+              <HealthInsuranceCard insurance={insurance} />
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <Modal
+        isOpen={editingInsurance}
+        onClose={closeInsuranceModal}
+        busy={savingInsurance || savingHolder}
+        title="Cập nhật thông tin cá nhân và bảo hiểm"
+        className="insurance-edit-modal"
+      >
+        <h3>Thông tin cá nhân</h3>
+        {personalInfoError && <p role="alert" className="feedback feedback-error">{personalInfoError}</p>}
               <form className="health-form" onSubmit={saveHolder}>
-                <fieldset className="health-form-grid">
+                <fieldset className="health-form-grid" disabled={savingHolder || savingInsurance}>
                   <label className="form-field">
                     <span>Họ tên <span className="required">*</span></span>
                     <input
-                      autoFocus
                       type="text"
                       required
                       maxLength={100}
                       value={holderDraft.fullName}
                       onChange={(e) => setHolderDraft({ ...holderDraft, fullName: e.target.value })}
-                    />
-                  </label>
-                  <label className="form-field">
-                    <span>Mã BHXH <span className="required">*</span></span>
-                    <input
-                      type="text"
-                      required
-                      maxLength={15}
-                      value={holderDraft.socialInsuranceNumber}
-                      onChange={(e) => setHolderDraft({ ...holderDraft, socialInsuranceNumber: e.target.value })}
-                      placeholder="VD: 0123456789"
                     />
                   </label>
                   <label className="form-field">
@@ -371,75 +418,31 @@ export default function StudentHealthProfile() {
                     />
                   </label>
                   <label className="form-field">
-                    <span>ĐDCN/CCCD/Hộ chiếu <span className="required">*</span></span>
-                    <input
-                      type="text"
-                      required
-                      maxLength={20}
-                      value={holderDraft.identityNumber}
-                      onChange={(e) => setHolderDraft({ ...holderDraft, identityNumber: e.target.value })}
-                      placeholder="VD: 079205000001"
-                    />
-                  </label>
-                  <label className="form-field">
                     <span>Số điện thoại <span className="required">*</span></span>
                     <input
                       type="tel"
                       required
-                      maxLength={20}
+                      maxLength={15}
                       value={holderDraft.phone}
                       onChange={(e) => setHolderDraft({ ...holderDraft, phone: e.target.value })}
                       placeholder="VD: 090 123 4567"
                     />
                   </label>
-                  <label className="form-field">
-                    <span>Địa chỉ <span className="required">*</span></span>
-                    <input
-                      type="text"
-                      required
-                      maxLength={250}
-                      value={holderDraft.address}
-                      onChange={(e) => setHolderDraft({ ...holderDraft, address: e.target.value })}
-                      placeholder="Địa chỉ liên hệ"
-                    />
-                  </label>
+                  <label className="form-field"><span>Email</span><input type="email" maxLength={100} value={holderDraft.email} onChange={(e) => setHolderDraft({ ...holderDraft, email: e.target.value })} /></label>
+                  <label className="form-field"><span>Giới tính</span><select value={holderDraft.gender} onChange={(e) => setHolderDraft({ ...holderDraft, gender: e.target.value })}><option value="">Chưa cập nhật</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option><option value="Khác">Khác</option></select></label>
                 </fieldset>
                 <div className="dialog-actions">
-                  <button type="button" className="button secondary" onClick={finishHolder}>Hủy thay đổi</button>
-                  <button type="submit" className="button primary">Lưu thông tin</button>
+                  <button type="button" className="button secondary" disabled={savingHolder || savingInsurance} onClick={closeInsuranceModal}>Hủy thay đổi</button>
+                  <button type="submit" disabled={savingHolder || savingInsurance} className="button primary">{savingHolder ? "Đang lưu…" : "Lưu thông tin"}</button>
                 </div>
               </form>
-            ) : (
-              <dl className="health-details-grid">
-                <Detail label="Họ tên">{name}</Detail>
-                <Detail label="Mã BHXH">{insurance?.socialInsuranceNumber}</Detail>
-                <Detail label="Ngày sinh">{student?.dateOfBirth ? formatInsuranceDate(student.dateOfBirth) : null}</Detail>
-                <Detail label="ĐDCN/CCCD/Hộ chiếu">{student?.identityNumber}</Detail>
-                <Detail label="Số điện thoại">{student?.phone}</Detail>
-                <Detail label="Địa chỉ">{student?.address}</Detail>
-              </dl>
-            )}
-            <div className="insurance-toggle-list">
-              <HealthInsuranceCard insurance={insurance} onEdit={openInsuranceModal} editing={editingInsurance} />
-            </div>
-          </section>
-        </div>
-      </div>
-
-      <Modal
-        isOpen={editingInsurance}
-        onClose={closeInsuranceModal}
-        busy={savingInsurance}
-        title={insurance.cardNumber ? "Chỉnh sửa thông tin thẻ BHYT" : "Thêm thông tin thẻ BHYT"}
-        className="insurance-edit-modal"
-      >
+        <h3>Thẻ BHYT</h3>
         <form className="record-form" onSubmit={saveInsurance}>
           {insuranceError && <div role="alert" className="feedback feedback-error">{insuranceError}</div>}
           <fieldset className="insurance-modal-grid" disabled={savingInsurance}>
             <label className="form-field">
               <span>Số thẻ BHYT <span className="required">*</span></span>
               <input
-                autoFocus
                 type="text"
                 required
                 maxLength={15}
@@ -488,24 +491,6 @@ export default function StudentHealthProfile() {
                 value={insuranceDraft.initialProvider}
                 onChange={(e) => setInsuranceDraft({ ...insuranceDraft, initialProvider: e.target.value })}
                 placeholder="VD: Trung tâm Y tế Đại học"
-              />
-            </label>
-            <label className="form-field">
-              <span>Mã cơ sở KCB</span>
-              <input
-                type="text"
-                maxLength={30}
-                value={insuranceDraft.providerCode}
-                onChange={(e) => setInsuranceDraft({ ...insuranceDraft, providerCode: e.target.value })}
-                placeholder="VD: 79 - 036"
-              />
-            </label>
-            <label className="form-field health-full-row">
-              <span>Thời điểm đủ 5 năm liên tục</span>
-              <input
-                type="date"
-                value={insuranceDraft.continuousFiveYearsFrom}
-                onChange={(e) => setInsuranceDraft({ ...insuranceDraft, continuousFiveYearsFrom: e.target.value })}
               />
             </label>
           </fieldset>

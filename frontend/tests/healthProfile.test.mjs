@@ -38,6 +38,7 @@ test('validates and maps /api/health-insurances contract and calculates status',
       effectiveDate: '2026-01-01',
       expirationDate: '2026-12-31',
       initialHospital: 'Trung tâm Y tế Đại học',
+      issueAt: 'TP. Hồ Chí Minh',
     },
   ], { issuedAt: 'TP. Hồ Chí Minh', benefits: 'Quyền lợi 80%' });
 
@@ -55,11 +56,16 @@ test('validates and maps /api/health-insurances contract and calculates status',
     effectiveDate: '2026-01-01',
     expirationDate: '2026-12-31',
     initialHospital: 'Trung tâm Y tế Đại học',
+    issueAt: 'TP. Hồ Chí Minh',
   });
 
   assert.ok(validateInsuranceDraft({ ...mapped, cardNumber: '123' }).includes('10 chữ số hoặc 15 ký tự'));
   assert.ok(validateInsuranceDraft({ ...mapped, validFrom: '2026-12-31', validUntil: '2026-01-01' }).includes('Ngày bắt đầu hiệu lực'));
   assert.equal(getInsuranceStatus('2026-01-01', '2026-12-31', new Date('2026-06-01T00:00:00Z')).state, 'active');
+  assert.throws(() => toInsuranceRequest(mapped, 0), /Không xác định được sinh viên/);
+  assert.throws(() => toInsuranceRequest({}, undefined), /Không xác định được sinh viên/);
+  assert.equal(fromInsuranceResponse(null).cardNumber, '');
+  assert.equal(fromInsuranceResponse([]).validFrom, '');
 });
 
 test('API uses current-user endpoints, forwards abort signal and propagates failures', async () => {
@@ -96,4 +102,15 @@ test('API uses current-user endpoints, forwards abort signal and propagates fail
   await assert.rejects(api.saveInsurance({ cardNumber: 'SV4790123456789' }, 9), failure);
   assert.equal(calls[4][0], 'put');
   assert.equal(calls[4][1], '/health-insurances/9');
+
+  await api.getPersonalInfo(signal);
+  assert.equal(calls[5][0], 'get');
+  assert.equal(calls[5][1], '/health-profile/personal-info');
+  assert.equal(calls[5][2].signal, signal);
+  const personalInfo = { fullName: 'Sinh viên', dateOfBirth: '2005-02-14', phoneNumber: '0901234567', email: 'student@example.com', gender: 'Nữ' };
+  await assert.rejects(api.savePersonalInfo(personalInfo), failure);
+  assert.equal(calls[6][0], 'put');
+  assert.equal(calls[6][1], '/health-profile/personal-info');
+  assert.equal(calls[6][2], personalInfo);
+  assert.equal(calls[6][3].timeout, 15000);
 });

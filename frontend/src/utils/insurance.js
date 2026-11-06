@@ -2,9 +2,9 @@ const DAY = 86400000;
 const BHYT_CARD_PATTERN = /^(?:\d{10}|[A-Z]{2}\d{13})$/;
 
 function calendarDay(value) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return NaN;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return Number.NaN;
   const date = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? date.getTime() / DAY : NaN;
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? date.getTime() / DAY : Number.NaN;
 }
 
 export function getInsuranceStatus(validFrom, validUntil, now = new Date()) {
@@ -34,9 +34,7 @@ export function fromInsuranceResponse(rawData, fallback = {}) {
     validFrom: data?.effectiveDate ?? data?.issueDate ?? data?.validFrom ?? fallback?.validFrom ?? "",
     validUntil: data?.expirationDate ?? data?.validUntil ?? fallback?.validUntil ?? "",
     initialProvider: data?.initialHospital ?? data?.registeredHospital ?? data?.initialProvider ?? fallback?.initialProvider ?? "",
-    providerCode: data?.providerCode ?? fallback?.providerCode ?? "",
-    continuousFiveYearsFrom: data?.continuousFiveYearsFrom ?? fallback?.continuousFiveYearsFrom ?? "",
-    issuedAt: data?.issuedAt ?? fallback?.issuedAt ?? "",
+    issuedAt: data?.issueAt ?? data?.issuedAt ?? fallback?.issuedAt ?? "",
     benefits: data?.benefits ?? fallback?.benefits ?? "",
   };
 }
@@ -47,13 +45,17 @@ export function toInsuranceRequest(draft, studentId) {
   const expirationDate = (draft.validUntil ?? draft.expirationDate ?? "").trim();
   const initialHospital = (draft.initialProvider ?? draft.initialHospital ?? "").trim();
   const parsedStudentId = Number(studentId ?? draft.studentId);
+  if (!Number.isSafeInteger(parsedStudentId) || parsedStudentId <= 0) {
+    throw new Error("Không xác định được sinh viên. Vui lòng tải lại trang hoặc đăng nhập lại.");
+  }
 
   return {
     cardNumber,
-    studentId: Number.isFinite(parsedStudentId) && parsedStudentId > 0 ? parsedStudentId : 1,
+    studentId: parsedStudentId,
     effectiveDate,
     expirationDate,
     initialHospital,
+    issueAt: (draft.issuedAt ?? "").trim(),
   };
 }
 
@@ -78,10 +80,6 @@ export function validateInsuranceDraft(draft) {
   }
   if (initialHospital.length > 150) {
     return "Nơi đăng ký khám chữa bệnh ban đầu không được vượt quá 150 ký tự.";
-  }
-  const continuous = (draft.continuousFiveYearsFrom ?? "").trim();
-  if (continuous && !Number.isFinite(calendarDay(continuous))) {
-    return "Thời điểm đủ 5 năm liên tục không hợp lệ.";
   }
   return "";
 }
