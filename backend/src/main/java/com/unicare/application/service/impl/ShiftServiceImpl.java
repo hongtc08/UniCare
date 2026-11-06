@@ -80,6 +80,21 @@ public class ShiftServiceImpl implements ShiftService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<ShiftResponse> getAvailableShifts(
+            LocalDate date,
+            LocalDate fromDate,
+            LocalDate toDate,
+            Long doctorId,
+            ServiceType serviceType,
+            String room
+    ) {
+        return getShifts(date, fromDate, toDate, doctorId, serviceType, ShiftStatus.OPEN, room).stream()
+                .filter(s -> s.getAvailableSlots() > 0)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<DoctorOptionResponse> getAvailableDoctors() {
         List<User> doctors = userRepository.searchUsers("", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE);
         return doctors.stream()

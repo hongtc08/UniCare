@@ -35,6 +35,22 @@ public interface ShiftService {
         return getShifts(date, fromDate, toDate, doctorId, serviceType, status, null);
     }
 
+    List<ShiftResponse> getAvailableShifts(
+            LocalDate date,
+            LocalDate fromDate,
+            LocalDate toDate,
+            Long doctorId,
+            ServiceType serviceType,
+            String room
+    );
+
+    default List<ShiftResponse> getAvailableShifts(
+            LocalDate date,
+            ServiceType serviceType
+    ) {
+        return getAvailableShifts(date, null, null, null, serviceType, null);
+    }
+
     List<DoctorOptionResponse> getAvailableDoctors();
 
     ShiftResponse getShiftById(Long id);
