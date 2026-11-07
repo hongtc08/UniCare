@@ -88,6 +88,29 @@ class ShiftControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/shifts/available - Trả về danh sách ca khám còn chỗ theo ngày & loại dịch vụ")
+    void getAvailableShifts_ReturnsList() throws Exception {
+        when(shiftService.getAvailableShifts(
+                eq(LocalDate.of(2026, 10, 28)), any(), any(), any(), eq(ServiceType.KHAM_DA_KHOA), any()))
+                .thenReturn(List.of(sampleResponse));
+
+        mockMvc.perform(get("/api/shifts/available")
+                        .param("date", "2026-10-28")
+                        .param("serviceType", "KHAM_DA_KHOA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].id").value(1))
+                .andExpect(jsonPath("$.data[0].availableSlots").value(10))
+                .andExpect(jsonPath("$.data[0].status").value("OPEN"));
+
+        mockMvc.perform(get("/api/shifts/available")
+                        .param("date", "2026-10-28")
+                        .param("shiftType", "KHAM_DA_KHOA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
     @DisplayName("GET /api/shifts/doctors - Trả về danh sách bác sĩ rút gọn cho Dropdown")
     void getAvailableDoctors_ReturnsList() throws Exception {
         DoctorOptionResponse doctor = new DoctorOptionResponse(

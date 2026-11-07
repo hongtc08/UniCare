@@ -1,6 +1,7 @@
 package com.unicare.application.service;
 
 import com.unicare.application.dto.request.CancelAppointmentRequest;
+import com.unicare.application.dto.request.CreateAppointmentRequest;
 import com.unicare.application.dto.request.RescheduleAppointmentRequest;
 import com.unicare.application.dto.response.AppointmentResponse;
 import com.unicare.domain.enums.ServiceType;
@@ -12,6 +13,16 @@ import java.util.List;
  * Service xử lý các nghiệp vụ lịch hẹn khám bệnh (dùng chung cho Sinh viên và Bác sĩ).
  */
 public interface AppointmentService {
+
+    /**
+     * Sinh viên đặt lịch hẹn mới: khóa bi quan dòng Shift (SELECT ... FOR UPDATE),
+     * kiểm tra trùng khung giờ trong ngày, tạo lịch CONFIRMED kèm mã hẹn và tăng booked_slots.
+     *
+     * @param request         Thông tin ca khám và triệu chứng / lý do khám
+     * @param currentUsername Tên đăng nhập của sinh viên
+     * @return Thông tin lịch hẹn vừa tạo
+     */
+    AppointmentResponse createAppointment(CreateAppointmentRequest request, String currentUsername);
 
     /**
      * Hủy lịch hẹn khám và hoàn trả slot cho ca khám cũ.

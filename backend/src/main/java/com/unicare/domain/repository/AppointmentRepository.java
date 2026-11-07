@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -59,6 +61,21 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     boolean existsByStudentIdAndShiftIdAndStatus(
             @Param("studentId") Long studentId,
             @Param("shiftId") Long shiftId,
+            @Param("status") String status
+    );
+
+    @Query("SELECT COUNT(a) > 0 FROM Appointment a " +
+           "JOIN a.shift s " +
+           "WHERE a.student.id = :studentId " +
+           "AND UPPER(a.status) = UPPER(:status) " +
+           "AND s.shiftDate = :shiftDate " +
+           "AND s.startTime < :endTime " +
+           "AND s.endTime > :startTime")
+    boolean existsOverlappingAppointment(
+            @Param("studentId") Long studentId,
+            @Param("shiftDate") LocalDate shiftDate,
+            @Param("startTime") LocalTime startTime,
+            @Param("endTime") LocalTime endTime,
             @Param("status") String status
     );
 

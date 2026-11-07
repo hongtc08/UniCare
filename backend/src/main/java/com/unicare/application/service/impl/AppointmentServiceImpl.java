@@ -1,6 +1,7 @@
 package com.unicare.application.service.impl;
 
 import com.unicare.application.dto.request.CancelAppointmentRequest;
+import com.unicare.application.dto.request.CreateAppointmentRequest;
 import com.unicare.application.dto.request.RescheduleAppointmentRequest;
 import com.unicare.application.dto.response.AppointmentResponse;
 import com.unicare.application.service.AppointmentService;
@@ -9,6 +10,7 @@ import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
 import com.unicare.domain.entity.Appointment;
 import com.unicare.domain.entity.Shift;
+import com.unicare.domain.entity.Student;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.Role;
 import com.unicare.domain.enums.ServiceType;
@@ -20,8 +22,11 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -34,6 +39,8 @@ public class AppointmentServiceImpl implements AppointmentService {
     private static final String STATUS_CANCELED = "CANCELED";
     private static final String ACTOR_STUDENT = "STUDENT";
     private static final String ACTOR_DOCTOR = "DOCTOR";
+    private static final DateTimeFormatter CODE_DATE_FORMAT = DateTimeFormatter.ofPattern("yyMMdd");
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final AppointmentRepository appointmentRepository;
     private final ShiftRepository shiftRepository;
@@ -46,6 +53,80 @@ public class AppointmentServiceImpl implements AppointmentService {
         this.appointmentRepository = appointmentRepository;
         this.shiftRepository = shiftRepository;
         this.userRepository = userRepository;
+    }
+
+    @Override
+    @Transactional
+    public AppointmentResponse createAppointment(CreateAppointmentRequest request, String currentUsername) {
+        if (request == null || request.getShiftId() == null) {
+            throw new BadRequestException("Vui lòng chọn ca khám (shiftId)");
+        }
+        if (request.getReasonSymptoms() != null && request.getReasonSymptoms().trim().length() > 1000) {
+            throw new BadRequestException("Triệu chứng / lý do khám không được vượt quá 1000 ký tự");
+        }
+
+        User currentUser = resolveCurrentUser(currentUsername);
+        if (currentUser.getRole() != Role.SINH_VIEN) {
+            throw new AccessDeniedException("Chỉ tài khoản sinh viên mới có quyền đặt lịch hẹn khám bệnh");
+        }
+
+        Student student = resolveStudent(currentUser);
+
+        // Khóa bi quan (Pessimistic Lock - SELECT ... FOR UPDATE) trên dòng Shift để chống đặt trùng chỗ cuối cùng
+        Shift shift = shiftRepository.findByIdForUpdate(request.getShiftId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy ca khám với mã ID: " + request.getShiftId()));
+
+        validateShiftNotEndedOrPast(shift, "đặt");
+
+        int currentBooked = shift.getBookedSlots() != null ? shift.getBookedSlots() : 0;
+        if (shift.getStatus() == ShiftStatus.FULL || currentBooked >= shift.getMaxSlots()) {
+            throw new BadRequestException("Ca khám đã đầy chỗ (hết slot khả dụng)");
+        }
+
+        // Chặn sinh viên đặt trùng ca khám hoặc trùng khung giờ trong ngày
+        boolean alreadyBookedInShift = appointmentRepository.existsByStudentIdAndShiftIdAndStatus(
+                student.getId(), shift.getId(), STATUS_CONFIRMED);
+        if (alreadyBookedInShift) {
+            throw new DuplicateResourceException("Sinh viên đã có một lịch hẹn đã xác nhận trong ca khám này");
+        }
+
+        boolean overlappingInDay = appointmentRepository.existsOverlappingAppointment(
+                student.getId(),
+                shift.getShiftDate(),
+                shift.getStartTime(),
+                shift.getEndTime(),
+                STATUS_CONFIRMED
+        );
+        if (overlappingInDay) {
+            throw new DuplicateResourceException(
+                    "Sinh viên đã có lịch hẹn trùng khung giờ trong ngày " + shift.getShiftDate());
+        }
+
+        // Tăng booked_slots (chạm max_slots thì đổi ca sang FULL)
+        int updatedBooked = currentBooked + 1;
+        shift.setBookedSlots(updatedBooked);
+        if (updatedBooked >= shift.getMaxSlots()) {
+            shift.setStatus(ShiftStatus.FULL);
+        }
+        shiftRepository.save(shift);
+
+        String cleanSymptoms = (request.getReasonSymptoms() != null && !request.getReasonSymptoms().trim().isEmpty())
+                ? request.getReasonSymptoms().trim()
+                : null;
+
+        Appointment appointment = Appointment.builder()
+                .appointmentCode(generateUniqueAppointmentCode())
+                .student(student)
+                .shift(shift)
+                .reasonSymptoms(cleanSymptoms)
+                .status(STATUS_CONFIRMED)
+                .createdAt(OffsetDateTime.now())
+                .isReminded(false)
+                .build();
+
+        Appointment savedAppointment = appointmentRepository.save(appointment);
+        return AppointmentResponse.fromEntity(savedAppointment);
     }
 
     @Override
@@ -262,6 +343,27 @@ public class AppointmentServiceImpl implements AppointmentService {
         }
         return userRepository.findByUsername(currentUsername.trim())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản: " + currentUsername));
+    }
+
+    private Student resolveStudent(User currentUser) {
+        if (currentUser.getStudent() != null) {
+            return currentUser.getStudent();
+        }
+        return Student.builder()
+                .id(currentUser.getId())
+                .user(currentUser)
+                .studentCode(currentUser.getUsername())
+                .build();
+    }
+
+    private String generateUniqueAppointmentCode() {
+        String datePart = LocalDate.now().format(CODE_DATE_FORMAT);
+        String code;
+        do {
+            int randomSuffix = SECURE_RANDOM.nextInt(9999) + 1;
+            code = "LH" + datePart + String.format("%04d", randomSuffix);
+        } while (appointmentRepository.findByAppointmentCode(code).isPresent());
+        return code;
     }
 
     private String resolveActorAndValidateAccess(User currentUser, Appointment appointment, String actionName) {

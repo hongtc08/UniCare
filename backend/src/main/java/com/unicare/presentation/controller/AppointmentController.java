@@ -1,11 +1,13 @@
 package com.unicare.presentation.controller;
 
 import com.unicare.application.dto.request.CancelAppointmentRequest;
+import com.unicare.application.dto.request.CreateAppointmentRequest;
 import com.unicare.application.dto.request.RescheduleAppointmentRequest;
 import com.unicare.application.dto.response.AppointmentResponse;
 import com.unicare.application.service.AppointmentService;
 import com.unicare.common.response.ApiResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +23,21 @@ public class AppointmentController {
 
     public AppointmentController(AppointmentService appointmentService) {
         this.appointmentService = appointmentService;
+    }
+
+    /**
+     * Sinh viên đặt lịch hẹn khám bệnh mới (Tự động xác nhận CONFIRMED & khóa đồng thời ca khám).
+     * POST /api/appointments
+     */
+    @PostMapping
+    @PreAuthorize("hasRole('SINH_VIEN')")
+    public ResponseEntity<ApiResponse<AppointmentResponse>> createAppointment(
+            @Valid @RequestBody CreateAppointmentRequest request,
+            Principal principal) {
+        String currentUsername = principal != null ? principal.getName() : null;
+        AppointmentResponse response = appointmentService.createAppointment(request, currentUsername);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Đặt lịch hẹn khám thành công", response));
     }
 
     /**

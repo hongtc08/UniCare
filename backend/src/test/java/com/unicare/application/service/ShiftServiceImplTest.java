@@ -139,6 +139,46 @@ class ShiftServiceImplTest {
     }
 
     @Test
+    @DisplayName("Lấy danh sách ca khám còn chỗ (GET /api/shifts/available) theo ngày & loại dịch vụ thành công")
+    void getAvailableShifts_Success() {
+        Shift fullShift = new Shift(
+                sampleStaff,
+                sampleDate,
+                LocalTime.of(10, 0),
+                LocalTime.of(11, 0),
+                ServiceType.KHAM_DA_KHOA,
+                "Phòng 101",
+                5
+        );
+        fullShift.setId(101L);
+        fullShift.setBookedSlots(5);
+        fullShift.setStatus(ShiftStatus.OPEN); // Dù status OPEN nhưng bookedSlots == maxSlots vẫn bị loại
+
+        Shift endedShift = new Shift(
+                sampleStaff,
+                sampleDate,
+                LocalTime.of(14, 0),
+                LocalTime.of(15, 0),
+                ServiceType.KHAM_DA_KHOA,
+                "Phòng 101",
+                5
+        );
+        endedShift.setId(102L);
+        endedShift.setBookedSlots(1);
+        endedShift.setStatus(ShiftStatus.ENDED);
+
+        when(shiftRepository.findAllWithDoctor()).thenReturn(List.of(sampleShift, fullShift, endedShift));
+
+        List<ShiftResponse> available = shiftService.getAvailableShifts(sampleDate, ServiceType.KHAM_DA_KHOA);
+        assertThat(available).hasSize(1);
+        assertThat(available.get(0).getId()).isEqualTo(100L);
+        assertThat(available.get(0).getAvailableSlots()).isEqualTo(7);
+
+        List<ShiftResponse> wrongService = shiftService.getAvailableShifts(sampleDate, ServiceType.TU_VAN_TAM_LY);
+        assertThat(wrongService).isEmpty();
+    }
+
+    @Test
     @DisplayName("Lấy danh sách bác sĩ đang hoạt động cho Dropdown thành công")
     void getAvailableDoctors_Success() {
         when(userRepository.searchUsers("", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE))
