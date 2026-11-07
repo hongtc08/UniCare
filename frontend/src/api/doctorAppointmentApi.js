@@ -1,6 +1,5 @@
 import axiosClient from "./axiosClient.js";
 import {
-  INITIAL_MOCK_APPOINTMENTS,
   createMockAppointmentsForDate,
   getMockAvailableShiftsForDate,
 } from "../components/doctor/mockDoctorAppointments.js";

@@ -102,7 +102,6 @@ export default function DoctorAppointmentList() {
   // Tải danh sách lịch hẹn khi bộ lọc hoặc revision thay đổi
   useEffect(() => {
     let active = true;
-    setLoading(true);
 
     doctorAppointmentApi
       .getDoctorAppointments({
