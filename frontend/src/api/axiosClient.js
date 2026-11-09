@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api",
+  baseURL: (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) || "http://localhost:8080/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -10,9 +10,11 @@ const axiosClient = axios.create({
 // Request Interceptor: Tự động đính kèm Token nếu có
 axiosClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (typeof localStorage !== "undefined") {
+      const token = localStorage.getItem("token");
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -27,13 +29,15 @@ axiosClient.interceptors.response.use(
 
     const isLoginRequest = error.config?.url === "/auth/login";
 
-    if (status === 401 && !isLoginRequest) {
+    if (status === 401 && !isLoginRequest && typeof localStorage !== "undefined") {
       // Xóa token và role trong localStorage, ép chuyển hướng về trang /login
       localStorage.removeItem("token");
       localStorage.removeItem("role");
       localStorage.removeItem("user");
-      window.location.href = "/login";
-    } else if (status === 403 && !isLoginRequest) {
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+    } else if (status === 403 && !isLoginRequest && typeof window !== "undefined") {
       // Chuyển hướng sang trang /unauthorized khi không có quyền truy cập
       window.location.href = "/unauthorized";
     }

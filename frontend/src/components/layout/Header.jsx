@@ -20,6 +20,16 @@ export default function Header({ onOpenSidebar }) {
   const region = useRef(null);
   const trigger = useRef(null);
   const name = user?.fullName || user?.name || user?.username || "Người dùng";
+  const isDoctor = user?.role === "NHAN_VIEN_Y_TE";
+  const isStudent = user?.role === "SINH_VIEN";
+  const doctorName = name.startsWith("BS") || name.startsWith("Bác sĩ") ? name : `BS. ${name}`;
+  const displayName = isDoctor ? doctorName : name;
+  const userSubtitle = isDoctor
+    ? `${user?.specialty || "Bác sĩ Đa khoa"} · Mã NV: ${user?.staffCode || user?.username || "NV001"}`
+    : isStudent
+    ? `Sinh viên · Mã ${user?.studentCode || user?.username || "20240182"}`
+    : `${ROLE_LABELS[user?.role] || "Quản trị viên"} · ${user?.username}`;
+
   const initials = name
     .split(" ")
     .filter(Boolean)
@@ -112,10 +122,8 @@ export default function Header({ onOpenSidebar }) {
           >
             <span className="avatar">{initials}</span>
             <span className="profile-copy">
-              <strong>{name}</strong>
-              <small>
-                {ROLE_LABELS[user?.role]} · {user?.username}
-              </small>
+              <strong>{displayName}</strong>
+              <small>{userSubtitle}</small>
             </span>
             <ChevronDown size={15} />
           </button>
