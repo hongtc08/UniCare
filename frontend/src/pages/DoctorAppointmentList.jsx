@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -22,7 +23,6 @@ import {
   ShieldAlert,
   UserCheck,
   RefreshCw,
-  Loader2,
 } from "lucide-react";
 import { doctorAppointmentApi } from "../api/doctorAppointmentApi";
 import { formatDay, serviceLabel, timeLabel, todayInVietnam } from "../utils/appointments";
@@ -33,8 +33,9 @@ import Toast from "../components/common/Toast";
 import { useAuth } from "../hooks/useAuth";
 
 export default function DoctorAppointmentList() {
+  const navigate = useNavigate();
   const { user } = useAuth();
-  const doctorDisplayName = user?.fullName || "Bác Sĩ A";
+  const doctorDisplayName = user?.fullName || "Bác Sĩ";
 
   // Bộ lọc
   const [filterDate, setFilterDate] = useState(() => todayInVietnam());
@@ -42,12 +43,20 @@ export default function DoctorAppointmentList() {
   const [serviceFilter, setServiceFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Dữ liệu và trạng thái
+  // Dữ liệu danh sách ca khám
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [revision, setRevision] = useState(0);
+
+  // Dữ liệu chi tiết hồ sơ sức khỏe & thông tin cá nhân bổ trợ cho SV đang chọn (Lazy loading)
+  const [studentDetails, setStudentDetails] = useState({
+    studentId: null,
+    personalInfo: null,
+    healthProfile: null,
+    loadingExtra: false,
+  });
 
   // Modals
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -70,7 +79,7 @@ export default function DoctorAppointmentList() {
     setRevision((prev) => prev + 1);
   }, []);
 
-  // Điều hướng ngày (như View Quản lý ca trực)
+  // Điều hướng ngày
   const handlePrevDay = () => {
     const d = new Date(filterDate);
     d.setDate(d.getDate() - 1);
@@ -93,12 +102,6 @@ export default function DoctorAppointmentList() {
     setSearchQuery("");
   };
 
-  const handleRestoreMock = () => {
-    doctorAppointmentApi.resetMockData(filterDate);
-    reloadAppointments();
-    showToast(`Đã khôi phục dữ liệu mẫu cho ngày ${formatDay(filterDate)}.`);
-  };
-
   // Tải danh sách lịch hẹn khi bộ lọc hoặc revision thay đổi
   useEffect(() => {
     let active = true;
@@ -108,7 +111,7 @@ export default function DoctorAppointmentList() {
         date: filterDate,
         shiftType: serviceFilter !== "ALL" ? serviceFilter : undefined,
         status: statusFilter !== "ALL" ? statusFilter : undefined,
-        search: searchQuery.trim() || undefined,
+        keyword: searchQuery.trim() || undefined,
       })
       .then((data) => {
         if (!active) return;
@@ -126,7 +129,11 @@ export default function DoctorAppointmentList() {
       })
       .catch((cause) => {
         if (active) {
-          setError(cause?.message || "Không thể tải danh sách lịch khám. Vui lòng thử lại.");
+          setError(
+            cause?.response?.data?.message ||
+              cause?.message ||
+              "Không thể tải danh sách lịch khám. Vui lòng kiểm tra kết nối mạng."
+          );
         }
       })
       .finally(() => {
@@ -140,8 +147,92 @@ export default function DoctorAppointmentList() {
 
   // Lịch hẹn đang chọn ở cột phải
   const selectedAppointment = useMemo(() => {
-    return appointments.find((a) => a.id === selectedId) || null;
-  }, [appointments, selectedId]);
+    const found = appointments.find((a) => a.id === selectedId);
+    if (!found) return null;
+
+    // Hợp nhất dữ liệu chi tiết nếu có
+    const extraPersonal = studentDetails.personalInfo;
+    const extraHealth = studentDetails.healthProfile;
+
+    return {
+      ...found,
+      gender: extraPersonal?.gender || found.gender || "Chưa có",
+      dateOfBirth: extraPersonal?.dateOfBirth || found.dateOfBirth || found.date_of_birth,
+      studentPhone:
+        extraPersonal?.phoneNumber || found.studentPhone || found.phone_number || "Chưa có",
+      classCode: extraPersonal?.classCode || found.classCode || found.class_code || "Chưa có",
+      facultyName:
+        extraPersonal?.facultyName || found.facultyName || found.faculty_name || "Chưa có",
+      health_records: {
+        ...(found.health_records || {}),
+        blood_type:
+          extraHealth?.bloodType ||
+          found.health_records?.blood_type ||
+          found.health_records?.bloodType ||
+          "Chưa cập nhật",
+        height:
+          extraHealth?.height ||
+          found.health_records?.height ||
+          "Chưa đo",
+        weight:
+          extraHealth?.weight ||
+          found.health_records?.weight ||
+          "Chưa đo",
+        bmi:
+          extraHealth?.bmi ||
+          found.health_records?.bmi ||
+          "--",
+        bmi_classification:
+          extraHealth?.bmiClassification ||
+          found.health_records?.bmi_classification ||
+          found.health_records?.bmiClassification ||
+          "Chưa phân loại",
+        allergies:
+          extraHealth?.allergies ||
+          found.health_records?.allergies ||
+          "Không ghi nhận",
+        underlying_diseases:
+          extraHealth?.underlyingDiseases ||
+          found.health_records?.underlying_diseases ||
+          found.health_records?.underlyingDiseases ||
+          "Không ghi nhận",
+        updated_at:
+          extraHealth?.updatedAt ||
+          found.health_records?.updated_at ||
+          "Mới nhất",
+      },
+    };
+  }, [appointments, selectedId, studentDetails]);
+
+  // Fetch thêm hồ sơ sức khỏe & thông tin cá nhân khi sinh viên thay đổi (Lazy Loading)
+  useEffect(() => {
+    let active = true;
+    const currentAppt = appointments.find((a) => a.id === selectedId);
+    const targetStudentId = currentAppt?.studentId || currentAppt?.student_id;
+
+    if (!selectedId || !targetStudentId) {
+      return () => {
+        active = false;
+      };
+    }
+
+    Promise.allSettled([
+      doctorAppointmentApi.getStudentPersonalInfo(targetStudentId),
+      doctorAppointmentApi.getStudentHealthProfile(targetStudentId),
+    ]).then(([personalRes, healthRes]) => {
+      if (!active) return;
+      setStudentDetails({
+        studentId: targetStudentId,
+        personalInfo: personalRes.status === "fulfilled" ? personalRes.value : null,
+        healthProfile: healthRes.status === "fulfilled" ? healthRes.value : null,
+        loadingExtra: false,
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedId, appointments]);
 
   // Thống kê 4 thẻ trên cùng theo 4 trạng thái DB
   const counts = useMemo(() => {
@@ -159,45 +250,31 @@ export default function DoctorAppointmentList() {
       else if (st === "NO_SHOW") noShow++;
     });
 
-    return {
-      total,
-      confirmed,
-      completed,
-      canceled,
-      noShow,
-      canceledOrNoShow: canceled + noShow,
-    };
+    return { total, confirmed, completed, canceled, noShow };
   }, [appointments]);
 
-  // Xử lý hủy lịch thành công
+  // Xử lý hủy lịch thành công: Gọi lại API GET để cập nhật lại danh sách & thống kê
   const handleCancelSuccess = (updated) => {
-    setAppointments((prev) =>
-      prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
-    );
-    showToast(`Đã hủy lịch hẹn ca ${updated.appointmentCode || updated.appointment_code} thành công.`);
+    const code = updated?.appointmentCode || updated?.appointment_code || `#${selectedId}`;
+    showToast(`Đã hủy lịch hẹn ca ${code} thành công.`, "success");
+    reloadAppointments();
   };
 
-  // Xử lý dời lịch thành công
+  // Xử lý dời lịch thành công: Gọi lại API GET để cập nhật lại danh sách & thống kê
   const handleRescheduleSuccess = (updated) => {
-    setAppointments((prev) =>
-      prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
-    );
+    const code = updated?.appointmentCode || updated?.appointment_code || `#${selectedId}`;
+    const newDate = updated?.shiftDate || updated?.shift_date;
     showToast(
-      `Đã dời lịch ca ${updated.appointmentCode || updated.appointment_code} sang ngày ${formatDay(
-        updated.shiftDate || updated.shift_date
-      )}.`
+      `Đã dời lịch ca ${code}${newDate ? ` sang ngày ${formatDay(newDate)}` : ""} thành công.`,
+      "success"
     );
+    reloadAppointments();
   };
 
-  // Bắt đầu khám bệnh (dẫn sang Sprint 4)
+  // Bắt đầu khám bệnh: Điều hướng sang /doctor/checkups/new?appointmentId={id}
   const handleStartExamination = () => {
     if (!selectedAppointment) return;
-    const name = selectedAppointment.studentName || selectedAppointment.full_name;
-    const code = selectedAppointment.appointmentCode || selectedAppointment.appointment_code;
-    showToast(
-      `Đang chuyển sang Màn hình Khám Bệnh (Sprint 4) cho sinh viên: ${name} (${code})...`,
-      "info"
-    );
+    navigate(`/doctor/checkups/new?appointmentId=${selectedAppointment.id}`);
   };
 
   // Helper render badge trạng thái chuẩn màu UniCare
@@ -248,135 +325,116 @@ export default function DoctorAppointmentList() {
       .filter(Boolean)
       .slice(-2)
       .map((p) => p[0])
-      .join("");
+      .join("")
+      .toUpperCase();
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 relative">
-      {/* Toast popup */}
-      <Toast toast={toast} onClose={() => setToast(null)} />
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 space-y-4">
+      {/* Toast thông báo */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
 
-      {/* 1. Header: Đồng bộ 100% với Quản lý ca trực (View 2) */}
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <div className="flex items-center gap-3">
+      {/* 1. HEADER CHÍNH - Đồng bộ typography với View Lịch trực */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Lịch làm việc hôm nay
           </h1>
-          {loading && (
-            <div className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full animate-pulse">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>Đang tải...</span>
-            </div>
-          )}
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            {formatDay(filterDate)} · Trạm Y tế Trường Đại học UniCare
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Nút làm mới danh sách */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <button
             type="button"
             onClick={reloadAppointments}
             disabled={loading}
-            className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors disabled:opacity-50"
-            title="Làm mới danh sách"
+            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors shrink-0 flex items-center gap-1.5 text-xs font-semibold disabled:opacity-50"
+            title="Tải lại dữ liệu từ máy chủ"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-
-          <button
-            type="button"
-            onClick={handleRestoreMock}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors shadow-xs"
-            title="Khôi phục danh sách dữ liệu mẫu đầy đủ để kiểm thử"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Khôi phục mẫu</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-blue-600" : ""}`} />
+            <span>Làm mới</span>
           </button>
         </div>
       </div>
 
-      {/* 2. 4 THẺ THỐNG KÊ ĐẾM THEO 4 TRẠNG THÁI DB (Kích thước gọn gàng, đồng bộ theme) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
+      {/* 2. HÀNG 4 THẺ THỐNG KÊ TRẠNG THÁI (Đồng bộ chuẩn 4 status DB) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Thẻ 1: Tổng lịch hẹn */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs hover:border-slate-300 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-lg shrink-0">
-              <CalendarIcon className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
-                Tổng lịch hẹn
-              </p>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-xl font-bold text-slate-900">{counts.total}</span>
-                <span className="text-[11px] text-slate-400 truncate">
-                  {counts.confirmed} đã xác nhận
-                </span>
-              </div>
-            </div>
+        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600">
+            <CalendarIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Tổng lịch hẹn
+            </p>
+            <p className="text-xl font-bold text-slate-800">{counts.total}</p>
+            <p className="text-[11px] text-slate-500">
+              {counts.confirmed} đã xác nhận · {counts.completed} đã khám
+            </p>
           </div>
         </div>
 
         {/* Thẻ 2: Đã xác nhận (CONFIRMED) */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs hover:border-slate-300 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-50 text-blue-700 rounded-lg shrink-0">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
-                Đã xác nhận
-              </p>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-xl font-bold text-blue-700">{counts.confirmed}</span>
-                <span className="text-[11px] text-slate-400 truncate">Chờ khám</span>
-              </div>
-            </div>
+        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Đã xác nhận (CONFIRMED)
+            </p>
+            <p className="text-xl font-bold text-blue-600">{counts.confirmed}</p>
+            <p className="text-[11px] text-slate-500">Chờ tiếp nhận & khám bệnh</p>
           </div>
         </div>
 
         {/* Thẻ 3: Đã hoàn thành (COMPLETED) */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs hover:border-slate-300 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg shrink-0">
-              <CheckCheck className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
-                Đã hoàn thành
-              </p>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-xl font-bold text-emerald-600">{counts.completed}</span>
-                <span className="text-[11px] text-slate-400 truncate">Đã xong ca</span>
-              </div>
-            </div>
+        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-600">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Đã hoàn thành (COMPLETED)
+            </p>
+            <p className="text-xl font-bold text-emerald-600">{counts.completed}</p>
+            <p className="text-[11px] text-slate-500">Đã hoàn tất ca khám</p>
           </div>
         </div>
 
         {/* Thẻ 4: Đã hủy / Vắng mặt (CANCELED / NO_SHOW) */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 shadow-xs hover:border-slate-300 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-lg shrink-0">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
-                Đã hủy / Vắng mặt
-              </p>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-xl font-bold text-rose-600">{counts.canceledOrNoShow}</span>
-                <span className="text-[11px] text-slate-400 truncate">
-                  {counts.canceled} hủy · {counts.noShow} vắng
-                </span>
-              </div>
-            </div>
+        <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-xs flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-rose-50 text-rose-600">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              Đã hủy / Vắng mặt
+            </p>
+            <p className="text-xl font-bold text-rose-600">
+              {counts.canceled + counts.noShow}
+            </p>
+            <p className="text-[11px] text-slate-500">
+              {counts.canceled} đã hủy · {counts.noShow} vắng mặt
+            </p>
           </div>
         </div>
       </div>
 
-      {/* 3. BỘ LỌC ĐỒNG BỘ 100% STYLE VỚI SHIFTFILTERS (View 2) */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 mb-4 shadow-xs space-y-3">
-        {/* Hàng 1: Ngày, Pill Bác sĩ, Dịch vụ, Tìm kiếm, Nút Reset */}
+      {/* 3. THANH BỘ LỌC (Filter Bar) */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-xs space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
-          {/* Cụm Chọn ngày (Chevron + Hôm nay + DatePicker) */}
+          {/* Cụm Điều hướng Ngày */}
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
               <button
@@ -418,7 +476,7 @@ export default function DoctorAppointmentList() {
 
           {/* Cụm Bộ lọc Phải */}
           <div className="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-0">
-            {/* Pill Bác sĩ cố định (Đúng phong cách ShiftFilters) */}
+            {/* Pill Bác sĩ */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium shrink-0">
               <UserCheck className="w-3.5 h-3.5 text-blue-600" />
               <span>
@@ -426,7 +484,7 @@ export default function DoctorAppointmentList() {
               </span>
             </div>
 
-            {/* Dropdown Dịch vụ (Icon Stethoscope như View 2) */}
+            {/* Dropdown Dịch vụ */}
             <div className="relative min-w-[155px]">
               <Stethoscope className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
@@ -473,7 +531,7 @@ export default function DoctorAppointmentList() {
           </div>
         </div>
 
-        {/* Hàng 2: Tabs Trạng thái & Thông báo trạng thái dữ liệu */}
+        {/* Hàng 2: Tabs Trạng thái */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-100 text-xs">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs font-semibold text-slate-400 mr-1 flex items-center gap-1">
@@ -502,13 +560,13 @@ export default function DoctorAppointmentList() {
           </div>
 
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Dữ liệu thử nghiệm đã sẵn sàng ({appointments.length} ca hẹn)</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />
+            <span>Đã kết nối API hệ thống ({appointments.length} ca khám)</span>
           </div>
         </div>
       </div>
 
-      {/* 4. GIAO DIỆN 2 CỘT (Cột trái: Danh sách lịch khám, Cột phải: Chi tiết hồ sơ) */}
+      {/* 4. GIAO DIỆN 2 CỘT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* CỘT TRÁI (5 Cột trên Desktop): Danh sách ca khám */}
         <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
@@ -526,9 +584,21 @@ export default function DoctorAppointmentList() {
           {/* Danh sách items */}
           <div className="divide-y divide-slate-100 max-h-[640px] overflow-y-auto">
             {loading ? (
-              <div className="p-10 text-center text-slate-400 space-y-2">
-                <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" />
-                <p className="text-xs">Đang tải danh sách ca khám...</p>
+              /* SKELETON LOADING */
+              <div className="p-4 space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="animate-pulse flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-8 bg-slate-200 rounded"></div>
+                      <div className="w-9 h-9 rounded-full bg-slate-200"></div>
+                      <div className="space-y-1.5">
+                        <div className="w-28 h-3.5 bg-slate-200 rounded"></div>
+                        <div className="w-20 h-2.5 bg-slate-200 rounded"></div>
+                      </div>
+                    </div>
+                    <div className="w-16 h-5 bg-slate-200 rounded-md"></div>
+                  </div>
+                ))}
               </div>
             ) : error ? (
               <div className="p-8 text-center text-rose-600 space-y-2">
@@ -547,15 +617,8 @@ export default function DoctorAppointmentList() {
                 <Stethoscope className="w-8 h-8 mx-auto text-slate-300" />
                 <p className="text-sm font-semibold text-slate-700">Không có lịch khám nào</p>
                 <p className="text-xs text-slate-400">
-                  Không tìm thấy lịch hẹn phù hợp điều kiện lọc.
+                  Không tìm thấy lịch hẹn phù hợp điều kiện lọc cho ngày này.
                 </p>
-                <button
-                  type="button"
-                  onClick={handleRestoreMock}
-                  className="mt-2 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-semibold transition"
-                >
-                  Tạo dữ liệu mẫu ngay
-                </button>
               </div>
             ) : (
               appointments.map((item) => {
@@ -589,7 +652,7 @@ export default function DoctorAppointmentList() {
                         </span>
                         <span
                           className={`inline-block mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-semibold ${
-                            (item.shift_session || (startTime && startTime.startsWith("08")))
+                            item.shift_session === "MORNING" || (startTime && startTime.startsWith("08"))
                               ? "bg-amber-50 text-amber-700 border border-amber-200/60"
                               : "bg-blue-50 text-blue-700 border border-blue-200/60"
                           }`}
@@ -648,87 +711,109 @@ export default function DoctorAppointmentList() {
           </div>
         </div>
 
-        {/* CỘT PHẢI (7 Cột trên Desktop): Chi tiết ca hẹn & Hồ sơ sinh viên */}
+        {/* CỘT PHẢI (7 Cột trên Desktop): Chi tiết hồ sơ bệnh nhân & lịch hẹn */}
         <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
           {!selectedAppointment ? (
-            <div className="p-14 text-center text-slate-400 space-y-3">
-              <User className="w-10 h-10 mx-auto text-slate-300" />
-              <h3 className="text-sm font-bold text-slate-700">Chưa chọn ca khám</h3>
-              <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                Nhấp vào bất kỳ ca khám nào trong danh sách bên trái để xem đầy đủ hồ sơ và thao tác.
+            <div className="p-16 text-center text-slate-400 space-y-3">
+              <User className="w-12 h-12 mx-auto text-slate-300 stroke-1" />
+              <h3 className="text-base font-semibold text-slate-700">Chưa chọn ca khám</h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                Nhấp vào bất kỳ ca khám nào trong danh sách bên trái để xem đầy đủ hồ sơ sức khỏe và thông tin chi tiết.
               </p>
             </div>
           ) : (
             <div className="flex flex-col h-full">
-              {/* Header sinh viên */}
-              <div className="p-5 border-b border-slate-200/80">
-                <div className="flex items-start justify-between gap-3">
+              {/* HEADER SINH VIÊN */}
+              <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3.5">
-                    <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-base shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-blue-600 text-white font-bold text-base flex items-center justify-center shadow-xs">
                       {getInitials(
                         selectedAppointment.studentName || selectedAppointment.full_name
                       )}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-bold text-slate-900">
+                          {selectedAppointment.studentName ||
+                            selectedAppointment.full_name ||
+                            "Sinh viên"}
+                        </h3>
                         {renderStatusBadge(selectedAppointment.status)}
                       </div>
-                      <h3 className="text-lg font-bold text-slate-900 tracking-tight">
-                        {selectedAppointment.studentName || selectedAppointment.full_name}
-                      </h3>
                       <p className="text-xs text-slate-500 font-mono mt-0.5">
-                        MSSV: {selectedAppointment.studentCode || selectedAppointment.student_code} ·{" "}
-                        {selectedAppointment.facultyName ||
-                          selectedAppointment.faculty_name ||
-                          "Khoa CNTT"}
+                        MSSV:{" "}
+                        <span className="font-semibold text-slate-700">
+                          {selectedAppointment.studentCode ||
+                            selectedAppointment.student_code ||
+                            "Chưa có"}
+                        </span>{" "}
+                        ·{" "}
+                        <span>
+                          {selectedAppointment.facultyName ||
+                            selectedAppointment.faculty_name ||
+                            "Khoa CNTT"}
+                        </span>
                       </p>
                     </div>
                   </div>
 
-                  {/* Nút Hồ sơ đầy đủ */}
                   <button
                     type="button"
                     onClick={() => setProfileModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors shrink-0"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200/60"
                   >
                     <span>Hồ sơ đầy đủ</span>
-                    <ExternalLink className="w-3 h-3" />
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 {/* Dải thông tin học vụ & liên hệ */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3.5 pt-3.5 border-t border-slate-100 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Lớp:</span>
-                    <span className="font-semibold text-slate-700">
-                      {selectedAppointment.classCode ||
-                        selectedAppointment.class_code ||
-                        "Chưa có"}
-                    </span>
+                {studentDetails.loadingExtra && studentDetails.studentId !== selectedAppointment.studentId ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3.5 pt-3.5 border-t border-slate-100 animate-pulse">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="space-y-1">
+                        <div className="w-10 h-2 bg-slate-200 rounded"></div>
+                        <div className="w-20 h-3.5 bg-slate-200 rounded"></div>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Giới tính:</span>
-                    <span className="font-semibold text-slate-700">
-                      {selectedAppointment.gender || "Chưa có"}
-                    </span>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3.5 pt-3.5 border-t border-slate-100 text-xs">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Lớp:</span>
+                      <span className="font-semibold text-slate-700">
+                        {selectedAppointment.classCode ||
+                          selectedAppointment.class_code ||
+                          "Chưa có"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Giới tính:</span>
+                      <span className="font-semibold text-slate-700">
+                        {selectedAppointment.gender || "Chưa có"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Ngày sinh:</span>
+                      <span className="font-semibold text-slate-700">
+                        {selectedAppointment.dateOfBirth
+                          ? formatDay(selectedAppointment.dateOfBirth)
+                          : selectedAppointment.date_of_birth
+                          ? formatDay(selectedAppointment.date_of_birth)
+                          : "Chưa có"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Số điện thoại:</span>
+                      <span className="font-semibold text-slate-700">
+                        {selectedAppointment.studentPhone ||
+                          selectedAppointment.phone_number ||
+                          "Chưa có"}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Ngày sinh:</span>
-                    <span className="font-semibold text-slate-700">
-                      {formatDay(
-                        selectedAppointment.dateOfBirth || selectedAppointment.date_of_birth
-                      )}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Số điện thoại:</span>
-                    <span className="font-semibold text-slate-700">
-                      {selectedAppointment.studentPhone ||
-                        selectedAppointment.phone_number ||
-                        "Chưa có"}
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Chi tiết cuộn */}
@@ -742,77 +827,86 @@ export default function DoctorAppointmentList() {
                     </h4>
                     <span className="text-[11px] text-slate-400">
                       Cập nhật:{" "}
-                      {selectedAppointment.health_records?.updated_at || "02/03/2026"}
+                      {selectedAppointment.health_records?.updated_at || "Mới nhất"}
                     </span>
                   </div>
 
-                  {/* 4 Thông số cơ bản */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                      <span className="text-slate-400 block text-[11px] mb-0.5">Nhóm máu</span>
-                      <span className="text-xs font-bold text-slate-800">
-                        {selectedAppointment.health_records?.blood_type ||
-                          selectedAppointment.health_records?.bloodType ||
-                          "A dương"}
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                      <span className="text-slate-400 block text-[11px] mb-0.5">Chiều cao / Cân nặng</span>
-                      <span className="text-xs font-bold text-slate-800">
-                        {selectedAppointment.health_records?.height || "162"} cm ·{" "}
-                        {selectedAppointment.health_records?.weight || "52"} kg
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-blue-50/60 rounded-lg border border-blue-100">
-                      <span className="text-blue-600 block text-[11px] mb-0.5">BMI</span>
-                      <span className="text-xs font-bold text-blue-900">
-                        {selectedAppointment.health_records?.bmi || "19.8"}{" "}
-                        <span className="text-[10px] font-normal text-blue-700">
-                          (
-                          {selectedAppointment.health_records?.bmi_classification ||
-                            selectedAppointment.health_records?.bmiClassification ||
-                            "Bình thường"}
-                          )
-                        </span>
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                      <span className="text-slate-400 block text-[11px] mb-0.5">Bệnh nền</span>
-                      <span className="text-xs font-bold text-slate-800 truncate block">
-                        {selectedAppointment.health_records?.underlying_diseases ||
-                          selectedAppointment.health_records?.underlyingDiseases ||
-                          "Không ghi nhận"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* CẢNH BÁO DỊ ỨNG */}
-                  {selectedAppointment.health_records?.allergies &&
-                  selectedAppointment.health_records?.allergies !== "Không ghi nhận" ? (
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg space-y-1 text-rose-900">
-                      <div className="flex items-center gap-1.5">
-                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <h5 className="font-bold text-xs uppercase tracking-wider text-rose-700">
-                          {selectedAppointment.health_records?.allergy_alert_title ||
-                            `Dị ứng: ${selectedAppointment.health_records?.allergies}`}
-                        </h5>
-                        <span className="px-1.5 py-0.5 bg-rose-200/80 text-rose-800 rounded text-[10px] font-bold uppercase ml-auto">
-                          Quan trọng
-                        </span>
+                  {studentDetails.loadingExtra && studentDetails.studentId !== selectedAppointment.studentId ? (
+                    /* SKELETON LOADING CHO HỒ SƠ SỨC KHỎE */
+                    <div className="space-y-2.5 animate-pulse">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {[1, 2, 3, 4].map((i) => (
+                          <div key={i} className="p-2.5 bg-slate-100 rounded-lg space-y-1.5">
+                            <div className="w-12 h-2.5 bg-slate-200 rounded"></div>
+                            <div className="w-16 h-3.5 bg-slate-200 rounded"></div>
+                          </div>
+                        ))}
                       </div>
-                      <p className="text-xs text-rose-800 font-medium pl-5">
-                        {selectedAppointment.health_records?.allergy_alert_desc ||
-                          selectedAppointment.health_records?.allergies}
-                      </p>
+                      <div className="p-3 bg-slate-100 rounded-lg h-12"></div>
                     </div>
                   ) : (
-                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs text-slate-500 flex items-center gap-2">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span>Không ghi nhận tiền sử dị ứng thuốc hay thực phẩm</span>
-                    </div>
+                    <>
+                      {/* 4 Thông số cơ bản */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-slate-400 block text-[11px] mb-0.5">Nhóm máu</span>
+                          <span className="text-xs font-bold text-slate-800">
+                            {selectedAppointment.health_records?.blood_type || "Chưa cập nhật"}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-slate-400 block text-[11px] mb-0.5">Chiều cao / Cân nặng</span>
+                          <span className="text-xs font-bold text-slate-800">
+                            {selectedAppointment.health_records?.height} cm ·{" "}
+                            {selectedAppointment.health_records?.weight} kg
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-blue-50/60 rounded-lg border border-blue-100">
+                          <span className="text-blue-600 block text-[11px] mb-0.5">BMI</span>
+                          <span className="text-xs font-bold text-blue-900">
+                            {selectedAppointment.health_records?.bmi}{" "}
+                            <span className="text-[10px] font-normal text-blue-700">
+                              ({selectedAppointment.health_records?.bmi_classification})
+                            </span>
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-slate-400 block text-[11px] mb-0.5">Bệnh nền</span>
+                          <span className="text-xs font-bold text-slate-800 truncate block">
+                            {selectedAppointment.health_records?.underlying_diseases || "Không ghi nhận"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* CẢNH BÁO DỊ ỨNG */}
+                      {selectedAppointment.health_records?.allergies &&
+                      selectedAppointment.health_records?.allergies !== "Không ghi nhận" ? (
+                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg space-y-1 text-rose-900">
+                          <div className="flex items-center gap-1.5">
+                            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                            <h5 className="font-bold text-xs uppercase tracking-wider text-rose-700">
+                              {selectedAppointment.health_records?.allergy_alert_title ||
+                                `Dị ứng: ${selectedAppointment.health_records?.allergies}`}
+                            </h5>
+                            <span className="px-1.5 py-0.5 bg-rose-200/80 text-rose-800 rounded text-[10px] font-bold uppercase ml-auto">
+                              Quan trọng
+                            </span>
+                          </div>
+                          <p className="text-xs text-rose-800 font-medium pl-5">
+                            {selectedAppointment.health_records?.allergy_alert_desc ||
+                              selectedAppointment.health_records?.allergies}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs text-slate-500 flex items-center gap-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <span>Không ghi nhận tiền sử dị ứng thuốc hay thực phẩm</span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -859,63 +953,56 @@ export default function DoctorAppointmentList() {
                     <div className="p-2.5 bg-slate-50 rounded-lg">
                       <span className="text-slate-400 block text-[11px] mb-0.5">Phòng khám</span>
                       <span className="font-semibold text-slate-800 truncate block">
-                        {selectedAppointment.room || "Phòng 102 - Khám Đa khoa"}
+                        {selectedAppointment.room || "P.101 - Phòng y tế"}
                       </span>
                     </div>
                   </div>
 
                   {/* Triệu chứng ban đầu */}
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200/80 text-xs space-y-1">
-                    <span className="font-semibold text-slate-600 block text-[11px]">
-                      Triệu chứng ban đầu do sinh viên khai báo:
+                  <div className="p-3 bg-slate-50/80 rounded-lg border border-slate-200/80 text-xs space-y-1">
+                    <span className="text-slate-500 font-semibold block text-[11px]">
+                      Triệu chứng ban đầu (Sinh viên mô tả khi đặt lịch):
                     </span>
-                    <p className="text-slate-800 italic">
+                    <p className="text-slate-700 leading-relaxed italic">
                       &ldquo;
                       {selectedAppointment.reasonSymptoms ||
                         selectedAppointment.reason_symptoms ||
-                        "Không có ghi chú triệu chứng"}
+                        "Sinh viên không ghi chú thêm triệu chứng ban đầu."}
                       &rdquo;
                     </p>
                   </div>
 
-                  {/* KHỐI CẢNH BÁO NẾU LỊCH HẸN BỊ HỦY (CANCELED) */}
+                  {/* Khối cảnh báo nếu ca khám bị CANCELED */}
                   {selectedAppointment.status === "CANCELED" && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs space-y-1 text-amber-900">
-                      <div className="flex items-center gap-1.5 font-bold text-amber-800">
-                        <ShieldAlert className="w-4 h-4 text-amber-600" />
-                        <span>Thông tin hủy lịch hẹn</span>
-                      </div>
-                      <div className="pl-5 space-y-0.5">
-                        <p>
-                          <strong>Người thực hiện:</strong>{" "}
-                          <span className="px-1.5 py-0.5 bg-amber-100 rounded text-amber-900 font-semibold text-[11px]">
-                            {selectedAppointment.canceledBy === "DOCTOR" ||
-                            selectedAppointment.canceled_by === "DOCTOR"
-                              ? "Bác sĩ phụ trách (DOCTOR)"
-                              : "Sinh viên đặt lịch (STUDENT)"}
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs space-y-1 text-rose-900">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <ShieldAlert className="w-4 h-4 text-rose-600" />
+                        <span>
+                          Thông tin hủy lịch (Hủy bởi:{" "}
+                          <span className="uppercase text-rose-700 underline">
+                            {selectedAppointment.canceledBy || selectedAppointment.canceled_by || "Bác sĩ"}
                           </span>
-                        </p>
-                        <p>
-                          <strong>Lý do:</strong>{" "}
-                          <span>
-                            {selectedAppointment.cancelRescheduleReason ||
-                              selectedAppointment.cancel_reschedule_reason ||
-                              "Không có lý do chi tiết"}
-                          </span>
-                        </p>
+                          )
+                        </span>
                       </div>
+                      <p className="text-rose-800 pl-5">
+                        <strong>Lý do: </strong>
+                        {selectedAppointment.cancelRescheduleReason ||
+                          selectedAppointment.cancel_reschedule_reason ||
+                          "Không có lý do chi tiết."}
+                      </p>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* FOOTER CỤM NÚT HÀNH ĐỘNG */}
-              <div className="p-3.5 border-t border-slate-100 bg-slate-50/60 flex flex-wrap items-center justify-between gap-2.5">
+              {/* FOOTER CỘT PHẢI - Cụm nút hành động */}
+              <div className="p-4 border-t border-slate-200/80 bg-slate-50/60 flex items-center justify-between gap-2">
                 {selectedAppointment.status === "CONFIRMED" ? (
                   <>
-                    <p className="text-xs text-slate-500 font-medium hidden sm:block">
-                      Ca khám sẵn sàng tiếp nhận
-                    </p>
+                    <span className="text-xs text-slate-500 hidden sm:inline">
+                      Ca khám đang sẵn sàng tiếp nhận sinh viên.
+                    </span>
                     <div className="flex items-center gap-2 ml-auto">
                       {/* Nút Hủy hẹn */}
                       <button
@@ -988,33 +1075,26 @@ export default function DoctorAppointmentList() {
         </div>
       </div>
 
-      {/* 2 MODAL TƯƠNG TÁC */}
-      {cancelModalOpen && (
-        <DoctorCancelModal
-          isOpen={cancelModalOpen}
-          appointment={selectedAppointment}
-          onClose={() => setCancelModalOpen(false)}
-          onSuccess={handleCancelSuccess}
-        />
-      )}
+      {/* 5. CÁC MODAL NGHIỆP VỤ */}
+      <DoctorCancelModal
+        isOpen={cancelModalOpen}
+        appointment={selectedAppointment}
+        onClose={() => setCancelModalOpen(false)}
+        onSuccess={handleCancelSuccess}
+      />
 
-      {rescheduleModalOpen && (
-        <DoctorRescheduleModal
-          isOpen={rescheduleModalOpen}
-          appointment={selectedAppointment}
-          onClose={() => setRescheduleModalOpen(false)}
-          onSuccess={handleRescheduleSuccess}
-        />
-      )}
+      <DoctorRescheduleModal
+        isOpen={rescheduleModalOpen}
+        appointment={selectedAppointment}
+        onClose={() => setRescheduleModalOpen(false)}
+        onSuccess={handleRescheduleSuccess}
+      />
 
-      {/* MODAL HỒ SƠ ĐẦY ĐỦ */}
-      {profileModalOpen && (
-        <StudentFullProfileModal
-          isOpen={profileModalOpen}
-          appointment={selectedAppointment}
-          onClose={() => setProfileModalOpen(false)}
-        />
-      )}
+      <StudentFullProfileModal
+        isOpen={profileModalOpen}
+        appointment={selectedAppointment}
+        onClose={() => setProfileModalOpen(false)}
+      />
     </div>
   );
 }

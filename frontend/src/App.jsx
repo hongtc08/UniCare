@@ -51,6 +51,7 @@ export default function App() {
               >
                 <Route path="/medical-list" element={<MedicalList />} />
                 <Route path="/doctor/appointments" element={<MedicalList />} />
+                <Route path="/doctor/checkups/new" element={<UpcomingFeature />} />
                 <Route path="/medical-records" element={<UpcomingFeature />} />
                 <Route path="/emergency" element={<UpcomingFeature />} />
               </Route>

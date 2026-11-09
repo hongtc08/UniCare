@@ -94,6 +94,9 @@ export default function DoctorRescheduleModal({ isOpen, appointment, onClose, on
 
   const handleClose = () => {
     if (submitting) return;
+    setReason("");
+    setError("");
+    setSelectedShiftId(null);
     onClose();
   };
 
@@ -121,6 +124,8 @@ export default function DoctorRescheduleModal({ isOpen, appointment, onClose, on
         selectedShiftId,
         trimmed
       );
+      setReason("");
+      setSelectedShiftId(null);
       onSuccess(updated);
       onClose();
     } catch (err) {
