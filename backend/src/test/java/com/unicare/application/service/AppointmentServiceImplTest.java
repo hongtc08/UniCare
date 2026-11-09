@@ -1,6 +1,7 @@
 package com.unicare.application.service;
 
 import com.unicare.application.dto.request.CancelAppointmentRequest;
+import com.unicare.application.dto.request.CreateAppointmentRequest;
 import com.unicare.application.dto.request.RescheduleAppointmentRequest;
 import com.unicare.application.dto.response.AppointmentResponse;
 import com.unicare.application.service.impl.AppointmentServiceImpl;
@@ -113,6 +114,7 @@ class AppointmentServiceImplTest {
                 .user(studentUser)
                 .studentCode("SV20260001")
                 .build();
+        studentUser.setStudent(student);
 
         medicalStaff = MedicalStaff.builder()
                 .id(20L)
@@ -159,6 +161,149 @@ class AppointmentServiceImplTest {
                 .createdAt(OffsetDateTime.now())
                 .isReminded(false)
                 .build();
+    }
+
+    // =========================================================================
+    // 0. Tests for createAppointment (BE1 - SP3-01)
+    // =========================================================================
+
+    @Test
+    @DisplayName("Đặt lịch hẹn thành công: Khóa bi quan Shift, tạo CONFIRMED kèm mã hẹn, tăng booked_slots và đổi sang FULL khi chạm max_slots")
+    void createAppointment_Success_LastSlot_TurnsShiftFull() {
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+        when(shiftRepository.findByIdForUpdate(102L)).thenReturn(Optional.of(targetShift));
+        when(appointmentRepository.existsByStudentIdAndShiftIdAndStatus(10L, 102L, "CONFIRMED")).thenReturn(false);
+        when(appointmentRepository.existsOverlappingAppointment(
+                10L, futureDate, LocalTime.of(14, 0), LocalTime.of(16, 0), "CONFIRMED")).thenReturn(false);
+        when(appointmentRepository.findByAppointmentCode(anyString()))
+                .thenReturn(Optional.of(appointment))
+                .thenReturn(Optional.empty());
+        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> {
+            Appointment a = inv.getArgument(0);
+            a.setId(50L);
+            return a;
+        });
+
+        CreateAppointmentRequest request = new CreateAppointmentRequest(102L, "  Đau đầu, chóng mặt 2 ngày  ");
+        AppointmentResponse response = appointmentService.createAppointment(request, "sv001");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getId()).isEqualTo(50L);
+        assertThat(response.getStatus()).isEqualTo("CONFIRMED");
+        assertThat(response.getAppointmentCode()).startsWith("LH").hasSize(12);
+        assertThat(response.getReasonSymptoms()).isEqualTo("Đau đầu, chóng mặt 2 ngày");
+        assertThat(response.getShiftId()).isEqualTo(102L);
+
+        // booked_slots tăng từ 4 lên 5 (= max_slots) -> đổi sang FULL
+        assertThat(targetShift.getBookedSlots()).isEqualTo(5);
+        assertThat(targetShift.getStatus()).isEqualTo(ShiftStatus.FULL);
+        verify(shiftRepository).findByIdForUpdate(102L);
+        verify(shiftRepository).save(targetShift);
+        verify(appointmentRepository).save(any(Appointment.class));
+    }
+
+    @Test
+    @DisplayName("Đặt lịch hẹn thành công khi ca khám còn nhiều chỗ (bookedSlots null & triệu chứng rỗng): giữ nguyên trạng thái OPEN")
+    void createAppointment_Success_RemainsOpen() {
+        targetShift.setBookedSlots(null);
+        targetShift.setMaxSlots(5);
+        studentUser.setStudent(null);
+
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+        when(shiftRepository.findByIdForUpdate(102L)).thenReturn(Optional.of(targetShift));
+        when(appointmentRepository.existsByStudentIdAndShiftIdAndStatus(10L, 102L, "CONFIRMED")).thenReturn(false);
+        when(appointmentRepository.existsOverlappingAppointment(
+                10L, futureDate, LocalTime.of(14, 0), LocalTime.of(16, 0), "CONFIRMED")).thenReturn(false);
+        when(appointmentRepository.findByAppointmentCode(anyString())).thenReturn(Optional.empty());
+        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreateAppointmentRequest request = new CreateAppointmentRequest(102L, "   ");
+        AppointmentResponse response = appointmentService.createAppointment(request, "sv001");
+
+        assertThat(response.getStatus()).isEqualTo("CONFIRMED");
+        assertThat(response.getReasonSymptoms()).isNull();
+        assertThat(targetShift.getBookedSlots()).isEqualTo(1);
+        assertThat(targetShift.getStatus()).isEqualTo(ShiftStatus.OPEN);
+
+        CreateAppointmentRequest nullSymptomsRequest = new CreateAppointmentRequest(102L, null);
+        AppointmentResponse response2 = appointmentService.createAppointment(nullSymptomsRequest, "sv001");
+        assertThat(response2.getReasonSymptoms()).isNull();
+        assertThat(targetShift.getBookedSlots()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Đặt lịch hẹn: Chặn khi sinh viên đã có lịch hẹn trùng khung giờ trong ngày (409)")
+    void createAppointment_Duplicate_WhenOverlappingInSameDay() {
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+        when(shiftRepository.findByIdForUpdate(102L)).thenReturn(Optional.of(targetShift));
+        when(appointmentRepository.existsByStudentIdAndShiftIdAndStatus(10L, 102L, "CONFIRMED")).thenReturn(false);
+        when(appointmentRepository.existsOverlappingAppointment(
+                10L, futureDate, LocalTime.of(14, 0), LocalTime.of(16, 0), "CONFIRMED")).thenReturn(true);
+
+        CreateAppointmentRequest request = new CreateAppointmentRequest(102L, "Khám tâm lý");
+        assertThatThrownBy(() -> appointmentService.createAppointment(request, "sv001"))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("trùng khung giờ trong ngày");
+
+        verify(shiftRepository, never()).save(any());
+        verify(appointmentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Đặt lịch hẹn: Chặn khi sinh viên đặt trùng chính ca khám đó (409)")
+    void createAppointment_Duplicate_WhenSameShift() {
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+        when(shiftRepository.findByIdForUpdate(102L)).thenReturn(Optional.of(targetShift));
+        when(appointmentRepository.existsByStudentIdAndShiftIdAndStatus(10L, 102L, "CONFIRMED")).thenReturn(true);
+
+        CreateAppointmentRequest request = new CreateAppointmentRequest(102L, "Khám đa khoa");
+        assertThatThrownBy(() -> appointmentService.createAppointment(request, "sv001"))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("Sinh viên đã có một lịch hẹn đã xác nhận trong ca khám này");
+    }
+
+    @Test
+    @DisplayName("Đặt lịch hẹn: Chặn khi ca khám không tồn tại hoặc đã đầy chỗ (FULL hoặc booked_slots >= max_slots)")
+    void createAppointment_NotFound_Or_ShiftFull() {
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+        when(shiftRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> appointmentService.createAppointment(new CreateAppointmentRequest(999L, "Khám"), "sv001"))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        when(shiftRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(currentShift));
+        assertThatThrownBy(() -> appointmentService.createAppointment(new CreateAppointmentRequest(101L, "Đặt chỗ cuối nhưng đã hết"), "sv001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Ca khám đã đầy chỗ");
+
+        // Status OPEN nhưng bookedSlots >= maxSlots
+        targetShift.setStatus(ShiftStatus.OPEN);
+        targetShift.setBookedSlots(5);
+        targetShift.setMaxSlots(5);
+        when(shiftRepository.findByIdForUpdate(102L)).thenReturn(Optional.of(targetShift));
+        assertThatThrownBy(() -> appointmentService.createAppointment(new CreateAppointmentRequest(102L, "Đặt chỗ"), "sv001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Ca khám đã đầy chỗ");
+
+        verify(appointmentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Đặt lịch hẹn: Chặn khi tài khoản không phải sinh viên hoặc dữ liệu không hợp lệ")
+    void createAppointment_Validation_And_AccessDenied() {
+        assertThatThrownBy(() -> appointmentService.createAppointment(null, "sv001"))
+                .isInstanceOf(BadRequestException.class);
+
+        assertThatThrownBy(() -> appointmentService.createAppointment(new CreateAppointmentRequest(null, "Đau đầu"), "sv001"))
+                .isInstanceOf(BadRequestException.class);
+
+        assertThatThrownBy(() -> appointmentService.createAppointment(
+                new CreateAppointmentRequest(102L, "a".repeat(1001)), "sv001"))
+                .isInstanceOf(BadRequestException.class);
+
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        assertThatThrownBy(() -> appointmentService.createAppointment(new CreateAppointmentRequest(102L, "Khám"), "bs001"))
+                .isInstanceOf(AccessDeniedException.class);
     }
 
     // =========================================================================

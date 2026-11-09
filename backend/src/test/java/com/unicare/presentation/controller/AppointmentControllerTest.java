@@ -2,6 +2,7 @@ package com.unicare.presentation.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicare.application.dto.request.CancelAppointmentRequest;
+import com.unicare.application.dto.request.CreateAppointmentRequest;
 import com.unicare.application.dto.request.RescheduleAppointmentRequest;
 import com.unicare.application.dto.response.AppointmentResponse;
 import com.unicare.application.service.AppointmentService;
@@ -24,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,8 +58,41 @@ class AppointmentControllerTest {
                 .id(1L)
                 .appointmentCode("LH2611040001")
                 .studentId(10L)
+                .shiftId(102L)
                 .status("CONFIRMED")
                 .build();
+    }
+
+    @Test
+    @DisplayName("POST /api/appointments - Sinh viên đặt lịch hẹn thành công (201 Created)")
+    void createAppointment_Success() throws Exception {
+        CreateAppointmentRequest request = new CreateAppointmentRequest(102L, "Đau đầu sốt nhẹ");
+
+        when(appointmentService.createAppointment(any(CreateAppointmentRequest.class), eq("sv001")))
+                .thenReturn(sampleResponse);
+
+        mockMvc.perform(post("/api/appointments")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.appointmentCode").value("LH2611040001"))
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+    }
+
+    @Test
+    @DisplayName("POST /api/appointments - Lỗi Validation khi thiếu shiftId")
+    void createAppointment_ValidationError() throws Exception {
+        CreateAppointmentRequest request = new CreateAppointmentRequest(null, "Đau đầu");
+
+        mockMvc.perform(post("/api/appointments")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     @Test

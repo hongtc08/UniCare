@@ -53,6 +53,28 @@ public class ShiftController {
     }
 
     /**
+     * Lấy danh sách ca khám còn chỗ theo ngày & loại dịch vụ (Khám đa khoa / Tư vấn tâm lý)
+     * GET /api/shifts/available
+     */
+    @GetMapping("/available")
+    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE', 'SINH_VIEN')")
+    public ResponseEntity<ApiResponse<List<ShiftResponse>>> getAvailableShifts(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) Long doctorId,
+            @RequestParam(required = false) ServiceType serviceType,
+            @RequestParam(required = false) ServiceType shiftType,
+            @RequestParam(required = false) String room
+    ) {
+        ServiceType effectiveServiceType = serviceType != null ? serviceType : shiftType;
+        List<ShiftResponse> shifts = shiftService.getAvailableShifts(
+                date, fromDate, toDate, doctorId, effectiveServiceType, room
+        );
+        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách ca khám còn chỗ thành công", shifts));
+    }
+
+    /**
      * Lấy danh sách Bác sĩ / Nhân viên y tế đang hoạt động (ACTIVE) để hiển thị Dropdown chọn bác sĩ
      * GET /api/shifts/doctors
      */
