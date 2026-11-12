@@ -79,6 +79,30 @@ public class MedicalCheckup {
     @OneToOne(mappedBy = "medicalCheckup", cascade = CascadeType.ALL, orphanRemoval = true)
     private TransferRecord transferRecord;
 
+    public void addPrescribedMedicine(PrescribedMedicine medicine) {
+        if (this.prescribedMedicines == null) {
+            this.prescribedMedicines = new ArrayList<>();
+        }
+        this.prescribedMedicines.add(medicine);
+        medicine.setMedicalCheckup(this);
+    }
+
+    public void removePrescribedMedicine(PrescribedMedicine medicine) {
+        if (this.prescribedMedicines != null) {
+            this.prescribedMedicines.remove(medicine);
+            medicine.setMedicalCheckup(null);
+        }
+    }
+
+    public void clearPrescribedMedicines() {
+        if (this.prescribedMedicines != null) {
+            for (PrescribedMedicine medicine : this.prescribedMedicines) {
+                medicine.setMedicalCheckup(null);
+            }
+            this.prescribedMedicines.clear();
+        }
+    }
+
     @PrePersist
     public void prePersist() {
         if (this.createdAt == null) {
