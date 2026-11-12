@@ -30,4 +30,13 @@ public interface MedicalCheckupRepository extends JpaRepository<MedicalCheckup, 
     List<MedicalCheckup> findByStudentId(Long studentId);
 
     List<MedicalCheckup> findByStaffId(Long staffId);
+
+    @Query("SELECT mc FROM MedicalCheckup mc " +
+           "LEFT JOIN FETCH mc.staff st " +
+           "LEFT JOIN FETCH st.user tu " +
+           "LEFT JOIN FETCH mc.diseaseGroup dg " +
+           "LEFT JOIN FETCH mc.appointment a " +
+           "WHERE mc.student.id = :studentId " +
+           "ORDER BY mc.createdAt DESC")
+    List<MedicalCheckup> findByStudentIdWithDetailsOrderByCreatedAtDesc(@Param("studentId") Long studentId);
 }

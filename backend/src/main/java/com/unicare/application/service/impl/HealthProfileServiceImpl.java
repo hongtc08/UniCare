@@ -5,7 +5,10 @@ package com.unicare.application.service.impl;
 
 import com.unicare.application.dto.request.HealthProfileRequest;
 import com.unicare.application.dto.request.StudentPersonalInfoRequest;
+import com.unicare.application.dto.response.HealthInsuranceResponse;
 import com.unicare.application.dto.response.HealthProfileResponse;
+import com.unicare.application.dto.response.MedicalCheckupSummaryResponse;
+import com.unicare.application.dto.response.StudentMedicalOverviewResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.service.HealthProfileService;
 import com.unicare.common.exception.BadRequestException;
@@ -18,7 +21,9 @@ import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.BloodType;
 import com.unicare.domain.enums.Role;
 import com.unicare.domain.repository.AcademicClassRepository;
+import com.unicare.domain.repository.HealthInsuranceRepository;
 import com.unicare.domain.repository.HealthRecordRepository;
+import com.unicare.domain.repository.MedicalCheckupRepository;
 import com.unicare.domain.repository.StudentRepository;
 import com.unicare.domain.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +35,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.Collections;
+import java.util.List;
 
 @Service
 public class HealthProfileServiceImpl implements HealthProfileService {
@@ -43,12 +50,22 @@ public class HealthProfileServiceImpl implements HealthProfileService {
     private final UserRepository userRepository;
     private final StudentRepository studentRepository;
     private final AcademicClassRepository academicClassRepository;
+    private final HealthInsuranceRepository healthInsuranceRepository;
+    private final MedicalCheckupRepository medicalCheckupRepository;
 
     public HealthProfileServiceImpl(
             HealthRecordRepository healthRecordRepository,
             UserRepository userRepository,
             StudentRepository studentRepository) {
-        this(healthRecordRepository, userRepository, studentRepository, null);
+        this(healthRecordRepository, userRepository, studentRepository, null, null, null);
+    }
+
+    public HealthProfileServiceImpl(
+            HealthRecordRepository healthRecordRepository,
+            UserRepository userRepository,
+            StudentRepository studentRepository,
+            AcademicClassRepository academicClassRepository) {
+        this(healthRecordRepository, userRepository, studentRepository, academicClassRepository, null, null);
     }
 
     @Autowired
@@ -56,11 +73,79 @@ public class HealthProfileServiceImpl implements HealthProfileService {
             HealthRecordRepository healthRecordRepository,
             UserRepository userRepository,
             StudentRepository studentRepository,
-            AcademicClassRepository academicClassRepository) {
+            AcademicClassRepository academicClassRepository,
+            HealthInsuranceRepository healthInsuranceRepository,
+            MedicalCheckupRepository medicalCheckupRepository) {
         this.healthRecordRepository = healthRecordRepository;
         this.userRepository = userRepository;
         this.studentRepository = studentRepository;
         this.academicClassRepository = academicClassRepository;
+        this.healthInsuranceRepository = healthInsuranceRepository;
+        this.medicalCheckupRepository = medicalCheckupRepository;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public StudentMedicalOverviewResponse getStudentMedicalOverview(String currentUsername, Long targetStudentId) {
+        if (currentUsername == null || currentUsername.isBlank()) {
+            throw new AccessDeniedException("Yêu cầu đăng nhập để thực hiện thao tác này");
+        }
+
+        User currentUser = userRepository.findByUsername(currentUsername.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản đang đăng nhập: " + currentUsername));
+
+        if (currentUser.getRole() == Role.BAN_QUAN_LY) {
+            throw new AccessDeniedException("Ban quản lý không được phép truy cập dữ liệu bệnh án cá nhân của sinh viên");
+        }
+
+        if (currentUser.getRole() != Role.NHAN_VIEN_Y_TE) {
+            throw new AccessDeniedException("Chỉ Nhân viên y tế (Bác sĩ) mới có quyền tra cứu hồ sơ y tế tổng hợp của sinh viên");
+        }
+
+        if (targetStudentId == null) {
+            throw new BadRequestException("Bác sĩ vui lòng truyền mã ID sinh viên (studentId) để tra cứu hồ sơ y tế tổng hợp");
+        }
+
+        User targetStudent = userRepository.findById(targetStudentId)
+                .or(() -> userRepository.findByUsername(String.valueOf(targetStudentId)))
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sinh viên với mã ID/MSSV: " + targetStudentId));
+
+        if (targetStudent.getRole() != Role.SINH_VIEN) {
+            throw new BadRequestException("Tài khoản mục tiêu (ID: " + targetStudentId + ") không phải là sinh viên");
+        }
+
+        Long studentId = targetStudent.getId();
+
+        Student student = studentRepository.findByIdWithDetails(studentId)
+                .or(() -> studentRepository.findById(studentId))
+                .orElse(null);
+
+        StudentPersonalInfoResponse studentInfo = StudentPersonalInfoResponse.fromEntities(targetStudent, student);
+
+        HealthProfileResponse healthProfile = healthRecordRepository.findByStudentId(studentId)
+                .map(HealthProfileResponse::fromEntity)
+                .orElse(null);
+
+        HealthInsuranceResponse healthInsurance = healthInsuranceRepository != null
+                ? healthInsuranceRepository.findByStudentIdWithDetails(studentId)
+                        .or(() -> healthInsuranceRepository.findByStudentId(studentId))
+                        .map(HealthInsuranceResponse::fromEntity)
+                        .orElse(null)
+                : null;
+
+        List<MedicalCheckupSummaryResponse> previousCheckups = medicalCheckupRepository != null
+                ? medicalCheckupRepository.findByStudentIdWithDetailsOrderByCreatedAtDesc(studentId)
+                        .stream()
+                        .map(MedicalCheckupSummaryResponse::fromEntity)
+                        .toList()
+                : Collections.emptyList();
+
+        return new StudentMedicalOverviewResponse(
+                studentInfo,
+                healthProfile,
+                healthInsurance,
+                previousCheckups
+        );
     }
 
     @Override

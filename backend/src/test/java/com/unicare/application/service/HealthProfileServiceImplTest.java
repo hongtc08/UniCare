@@ -6,21 +6,30 @@ package com.unicare.application.service;
 import com.unicare.application.dto.request.HealthProfileRequest;
 import com.unicare.application.dto.request.StudentPersonalInfoRequest;
 import com.unicare.application.dto.response.HealthProfileResponse;
+import com.unicare.application.dto.response.MedicalCheckupSummaryResponse;
+import com.unicare.application.dto.response.StudentMedicalOverviewResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.service.impl.HealthProfileServiceImpl;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
 import com.unicare.domain.entity.AcademicClass;
+import com.unicare.domain.entity.Appointment;
+import com.unicare.domain.entity.DiseaseGroup;
 import com.unicare.domain.entity.Faculty;
+import com.unicare.domain.entity.HealthInsurance;
 import com.unicare.domain.entity.HealthRecord;
+import com.unicare.domain.entity.MedicalCheckup;
+import com.unicare.domain.entity.MedicalStaff;
 import com.unicare.domain.entity.Student;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.BloodType;
 import com.unicare.domain.enums.Role;
 import com.unicare.domain.enums.UserStatus;
 import com.unicare.domain.repository.AcademicClassRepository;
+import com.unicare.domain.repository.HealthInsuranceRepository;
 import com.unicare.domain.repository.HealthRecordRepository;
+import com.unicare.domain.repository.MedicalCheckupRepository;
 import com.unicare.domain.repository.StudentRepository;
 import com.unicare.domain.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +43,8 @@ import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,6 +66,12 @@ class HealthProfileServiceImplTest {
 
     @Mock
     private AcademicClassRepository academicClassRepository;
+
+    @Mock
+    private HealthInsuranceRepository healthInsuranceRepository;
+
+    @Mock
+    private MedicalCheckupRepository medicalCheckupRepository;
 
     @InjectMocks
     private HealthProfileServiceImpl healthProfileService;
@@ -485,5 +502,213 @@ class HealthProfileServiceImplTest {
 
         assertThatThrownBy(() -> healthProfileService.getHealthProfile("   ", null))
                 .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("Bác sĩ tra cứu Hồ sơ Y tế Tổng hợp (getStudentMedicalOverview) đầy đủ 4 phần thành công")
+    void getStudentMedicalOverview_FullData_Success() {
+        when(userRepository.findByUsername("NV001")).thenReturn(Optional.of(doctorUser));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(studentUser));
+
+        HealthRecord healthRecord = new HealthRecord();
+        healthRecord.setId(10L);
+        healthRecord.setStudent(studentEntity);
+        healthRecord.setHeight(BigDecimal.valueOf(170.0));
+        healthRecord.setWeight(BigDecimal.valueOf(65.0));
+        healthRecord.setBloodType("O");
+        healthRecord.setBmi(BigDecimal.valueOf(22.5));
+        healthRecord.setBmiClassification("Bình thường");
+        healthRecord.setAllergies("Dị ứng tôm");
+        healthRecord.setUnderlyingDiseases("Viêm mũi dị ứng");
+        healthRecord.setMedicalHistory("Không phẫu thuật");
+        healthRecord.setVaccinationHistory("Đủ 3 mũi");
+        when(healthRecordRepository.findByStudentId(2L)).thenReturn(Optional.of(healthRecord));
+
+        HealthInsurance insurance = HealthInsurance.builder()
+                .id(20L)
+                .cardNumber("SV4792452057900")
+                .student(studentEntity)
+                .effectiveDate(LocalDate.now().minusMonths(3))
+                .expirationDate(LocalDate.now().plusMonths(9))
+                .initialHospital("Bệnh viện Đa khoa Khu vực Thủ Đức")
+                .issueAt("BHXH TP.HCM")
+                .build();
+        when(healthInsuranceRepository.findByStudentIdWithDetails(2L)).thenReturn(Optional.of(insurance));
+
+        MedicalStaff staff = MedicalStaff.builder()
+                .id(3L)
+                .user(doctorUser)
+                .staffCode("BS001")
+                .title("BAC_SI")
+                .specialty("DA_KHOA")
+                .build();
+        DiseaseGroup dg = new DiseaseGroup(5, "NHOM_HO_HAP", "Bệnh đường hô hấp");
+        Appointment appt = Appointment.builder().id(100L).appointmentCode("LH2611120001").build();
+
+        MedicalCheckup checkup = MedicalCheckup.builder()
+                .id(50L)
+                .checkupCode("PK2611120001")
+                .student(studentEntity)
+                .staff(staff)
+                .appointment(appt)
+                .checkupType("KHAM_DA_KHOA")
+                .isEmergency(false)
+                .periodicResult("LOAI_1")
+                .symptoms("Ho, đau họng")
+                .diagnosisNotes("Viêm họng cấp")
+                .treatmentSuggestions("Uống nhiều nước ấm, nghỉ ngơi")
+                .diseaseGroup(dg)
+                .status("COMPLETED")
+                .createdAt(OffsetDateTime.now().minusDays(2))
+                .completedAt(OffsetDateTime.now().minusDays(2))
+                .build();
+        when(medicalCheckupRepository.findByStudentIdWithDetailsOrderByCreatedAtDesc(2L))
+                .thenReturn(List.of(checkup));
+
+        StudentMedicalOverviewResponse overview = healthProfileService.getStudentMedicalOverview("NV001", 2L);
+
+        assertThat(overview).isNotNull();
+        assertThat(overview.getStudentInfo()).isNotNull();
+        assertThat(overview.getStudentInfo().getFullName()).isEqualTo("Tăng Chấn Hồng");
+        assertThat(overview.getStudentInfo().getClassCode()).isEqualTo("SE104.O11");
+        assertThat(overview.getStudentInfo().getFacultyName()).isEqualTo("Công nghệ Phần mềm");
+
+        assertThat(overview.getHealthProfile()).isNotNull();
+        assertThat(overview.getHealthProfile().getBmi()).isEqualTo(22.5);
+        assertThat(overview.getHealthProfile().getAllergies()).isEqualTo("Dị ứng tôm");
+
+        assertThat(overview.getHealthInsurance()).isNotNull();
+        assertThat(overview.getHealthInsurance().getCardNumber()).isEqualTo("SV4792452057900");
+
+        assertThat(overview.getPreviousCheckups()).hasSize(1);
+        assertThat(overview.getCheckupHistory()).hasSize(1);
+        MedicalCheckupSummaryResponse summary = overview.getPreviousCheckups().get(0);
+        assertThat(summary.getId()).isEqualTo(50L);
+        assertThat(summary.getCheckupCode()).isEqualTo("PK2611120001");
+        assertThat(summary.getCheckupType()).isEqualTo("KHAM_DA_KHOA");
+        assertThat(summary.getIsEmergency()).isFalse();
+        assertThat(summary.getPeriodicResult()).isEqualTo("LOAI_1");
+        assertThat(summary.getSymptoms()).isEqualTo("Ho, đau họng");
+        assertThat(summary.getDiagnosisNotes()).isEqualTo("Viêm họng cấp");
+        assertThat(summary.getTreatmentSuggestions()).isEqualTo("Uống nhiều nước ấm, nghỉ ngơi");
+        assertThat(summary.getDiseaseGroupId()).isEqualTo(5);
+        assertThat(summary.getDiseaseGroupName()).isEqualTo("Bệnh đường hô hấp");
+        assertThat(summary.getStaffId()).isEqualTo(3L);
+        assertThat(summary.getStaffCode()).isEqualTo("BS001");
+        assertThat(summary.getDoctorName()).isEqualTo("Bác Sĩ A");
+        assertThat(summary.getDoctorTitle()).isEqualTo("BAC_SI");
+        assertThat(summary.getDoctorSpecialty()).isEqualTo("DA_KHOA");
+        assertThat(summary.getAppointmentId()).isEqualTo(100L);
+        assertThat(summary.getAppointmentCode()).isEqualTo("LH2611120001");
+        assertThat(summary.getStatus()).isEqualTo("COMPLETED");
+        assertThat(summary.getCreatedAt()).isNotNull();
+        assertThat(summary.getCompletedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Bác sĩ tra cứu Hồ sơ Y tế Tổng hợp khi sinh viên chưa có HealthRecord/BHYT/lần khám trước")
+    void getStudentMedicalOverview_WhenOptionalDataMissing_ReturnsNullSafeOverview() {
+        when(userRepository.findByUsername("NV001")).thenReturn(Optional.of(doctorUser));
+        when(userRepository.findById(2L)).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("2")).thenReturn(Optional.of(studentUser));
+        when(studentRepository.findByIdWithDetails(2L)).thenReturn(Optional.empty());
+        when(studentRepository.findById(2L)).thenReturn(Optional.of(studentEntity));
+        when(healthRecordRepository.findByStudentId(2L)).thenReturn(Optional.empty());
+        when(healthInsuranceRepository.findByStudentIdWithDetails(2L)).thenReturn(Optional.empty());
+        when(healthInsuranceRepository.findByStudentId(2L)).thenReturn(Optional.empty());
+        when(medicalCheckupRepository.findByStudentIdWithDetailsOrderByCreatedAtDesc(2L)).thenReturn(List.of());
+
+        StudentMedicalOverviewResponse overview = healthProfileService.getStudentMedicalOverview("NV001", 2L);
+        assertThat(overview.getStudentInfo()).isNotNull();
+        assertThat(overview.getHealthProfile()).isNull();
+        assertThat(overview.getHealthInsurance()).isNull();
+        assertThat(overview.getPreviousCheckups()).isEmpty();
+
+        // Kiểm tra constructor 4 tham số khi healthInsuranceRepository & medicalCheckupRepository là null
+        HealthProfileServiceImpl fourArgService = new HealthProfileServiceImpl(
+                healthRecordRepository, userRepository, studentRepository, academicClassRepository
+        );
+        StudentMedicalOverviewResponse fallbackOverview = fourArgService.getStudentMedicalOverview("NV001", 2L);
+        assertThat(fallbackOverview.getHealthInsurance()).isNull();
+        assertThat(fallbackOverview.getPreviousCheckups()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Kiểm soát bảo mật getStudentMedicalOverview: Chặn BAN_QUAN_LY, chặn SINH_VIEN và kiểm tra lỗi đầu vào")
+    void getStudentMedicalOverview_SecurityAndValidationChecks() {
+        // 1. Chưa đăng nhập
+        assertThatThrownBy(() -> healthProfileService.getStudentMedicalOverview(null, 2L))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> healthProfileService.getStudentMedicalOverview("   ", 2L))
+                .isInstanceOf(AccessDeniedException.class);
+
+        // 2. Tài khoản đăng nhập không tồn tại
+        when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> healthProfileService.getStudentMedicalOverview("ghost", 2L))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        // 3. Chặn Ban quản lý (BAN_QUAN_LY) truy cập bệnh án cá nhân
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(adminUser));
+        assertThatThrownBy(() -> healthProfileService.getStudentMedicalOverview("admin", 2L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Ban quản lý không được phép truy cập dữ liệu bệnh án cá nhân");
+
+        // 4. Chặn Sinh viên (SINH_VIEN) gọi API dành riêng cho Bác sĩ
+        when(userRepository.findByUsername("24520579")).thenReturn(Optional.of(studentUser));
+        assertThatThrownBy(() -> healthProfileService.getStudentMedicalOverview("24520579", 2L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Chỉ Nhân viên y tế (Bác sĩ)");
+
+        // 5. Bác sĩ không truyền studentId
+        when(userRepository.findByUsername("NV001")).thenReturn(Optional.of(doctorUser));
+        assertThatThrownBy(() -> healthProfileService.getStudentMedicalOverview("NV001", null))
+                .isInstanceOf(BadRequestException.class);
+
+        // 6. Không tìm thấy sinh viên
+        when(userRepository.findById(999L)).thenReturn(Optional.empty());
+        when(userRepository.findByUsername("999")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> healthProfileService.getStudentMedicalOverview("NV001", 999L))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        // 7. ID truyền vào không phải tài khoản SINH_VIEN
+        when(userRepository.findById(1L)).thenReturn(Optional.of(adminUser));
+        assertThatThrownBy(() -> healthProfileService.getStudentMedicalOverview("NV001", 1L))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("không phải là sinh viên");
+    }
+
+    @Test
+    @DisplayName("Kiểm tra các nhánh biên của MedicalCheckupSummaryResponse và StudentMedicalOverviewResponse")
+    void medicalOverviewDtos_EdgeBranches() {
+        assertThat(MedicalCheckupSummaryResponse.fromEntity(null)).isNull();
+
+        MedicalStaff staffWithoutUser = MedicalStaff.builder().id(9L).staffCode("BS009").build();
+        MedicalCheckup minimalCheckup = MedicalCheckup.builder()
+                .id(51L)
+                .checkupCode("PK001")
+                .staff(staffWithoutUser)
+                .build();
+        MedicalCheckupSummaryResponse summaryWithStaffNoUser = MedicalCheckupSummaryResponse.fromEntity(minimalCheckup);
+        assertThat(summaryWithStaffNoUser.getStaffId()).isEqualTo(9L);
+        assertThat(summaryWithStaffNoUser.getDoctorName()).isNull();
+        assertThat(summaryWithStaffNoUser.getDiseaseGroupId()).isNull();
+        assertThat(summaryWithStaffNoUser.getAppointmentId()).isNull();
+
+        MedicalCheckup checkupNoStaff = MedicalCheckup.builder().id(52L).build();
+        MedicalCheckupSummaryResponse summaryNoStaff = MedicalCheckupSummaryResponse.fromEntity(checkupNoStaff);
+        assertThat(summaryNoStaff.getStaffId()).isNull();
+
+        StudentMedicalOverviewResponse emptyDto = new StudentMedicalOverviewResponse();
+        emptyDto.setStudentInfo(new StudentPersonalInfoResponse());
+        emptyDto.setHealthProfile(new HealthProfileResponse());
+        emptyDto.setHealthInsurance(null);
+        emptyDto.setPreviousCheckups(null);
+        assertThat(emptyDto.getStudentInfo()).isNotNull();
+        assertThat(emptyDto.getHealthProfile()).isNotNull();
+        assertThat(emptyDto.getHealthInsurance()).isNull();
+        assertThat(emptyDto.getPreviousCheckups()).isEmpty();
+
+        StudentMedicalOverviewResponse nullListCtor = new StudentMedicalOverviewResponse(null, null, null, null);
+        assertThat(nullListCtor.getPreviousCheckups()).isEmpty();
     }
 }

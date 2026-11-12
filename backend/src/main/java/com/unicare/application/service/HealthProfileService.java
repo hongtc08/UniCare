@@ -6,9 +6,16 @@ package com.unicare.application.service;
 import com.unicare.application.dto.request.HealthProfileRequest;
 import com.unicare.application.dto.request.StudentPersonalInfoRequest;
 import com.unicare.application.dto.response.HealthProfileResponse;
+import com.unicare.application.dto.response.StudentMedicalOverviewResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 
 public interface HealthProfileService {
+
+    /**
+     * Tra cứu Hồ sơ Y tế Tổng hợp của Sinh viên phục vụ Bác sĩ trong ca khám.
+     * Chỉ Nhân viên y tế (NHAN_VIEN_Y_TE) mới được phép truy cập; chặn Ban quản lý (BAN_QUAN_LY) và Sinh viên.
+     */
+    StudentMedicalOverviewResponse getStudentMedicalOverview(String currentUsername, Long targetStudentId);
 
     /**
      * Xem hồ sơ sức khỏe sinh học của sinh viên.
