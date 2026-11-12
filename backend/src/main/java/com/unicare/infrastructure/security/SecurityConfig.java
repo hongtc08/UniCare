@@ -50,7 +50,6 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.PUT, "/api/auth/change-password").authenticated()
-                        .requestMatchers("/api/doctor/**").hasRole("NHAN_VIEN_Y_TE")
                         .anyRequest().authenticated()
                 );
 

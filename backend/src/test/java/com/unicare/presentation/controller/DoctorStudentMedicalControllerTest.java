@@ -16,12 +16,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.security.Principal;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -136,5 +138,13 @@ class DoctorStudentMedicalControllerTest {
         mockMvc.perform(get("/api/doctor/students/2/medical-overview"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("Kiểm tra annotation @PreAuthorize chỉ cho phép NHAN_VIEN_Y_TE truy cập Controller")
+    void controllerRequiresDoctorRole() {
+        PreAuthorize annotation = DoctorStudentMedicalController.class.getAnnotation(PreAuthorize.class);
+        assertThat(annotation).isNotNull();
+        assertThat(annotation.value()).isEqualTo("hasRole('NHAN_VIEN_Y_TE')");
     }
 }
