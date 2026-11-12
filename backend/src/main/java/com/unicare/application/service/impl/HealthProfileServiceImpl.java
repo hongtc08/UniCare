@@ -86,6 +86,36 @@ public class HealthProfileServiceImpl implements HealthProfileService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<StudentPersonalInfoResponse> searchStudentsForDoctor(String currentUsername, String keyword) {
+        if (currentUsername == null || currentUsername.isBlank()) {
+            throw new AccessDeniedException("Yêu cầu đăng nhập để thực hiện thao tác này");
+        }
+
+        User currentUser = userRepository.findByUsername(currentUsername.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản đang đăng nhập: " + currentUsername));
+
+        if (currentUser.getRole() == Role.BAN_QUAN_LY) {
+            throw new AccessDeniedException("Ban quản lý không được phép truy cập dữ liệu bệnh án cá nhân của sinh viên");
+        }
+
+        if (currentUser.getRole() != Role.NHAN_VIEN_Y_TE) {
+            throw new AccessDeniedException("Chỉ Nhân viên y tế (Bác sĩ) mới có quyền tra cứu sinh viên phục vụ tiếp nhận khám bệnh");
+        }
+
+        String cleanKeyword = keyword != null ? keyword.trim() : "";
+        List<Student> students = studentRepository.searchStudentsByKeyword(cleanKeyword);
+        if (students == null || students.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return students.stream()
+                .limit(20)
+                .map(s -> StudentPersonalInfoResponse.fromEntities(s.getUser(), s))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public StudentMedicalOverviewResponse getStudentMedicalOverview(String currentUsername, Long targetStudentId) {
         if (currentUsername == null || currentUsername.isBlank()) {
             throw new AccessDeniedException("Yêu cầu đăng nhập để thực hiện thao tác này");

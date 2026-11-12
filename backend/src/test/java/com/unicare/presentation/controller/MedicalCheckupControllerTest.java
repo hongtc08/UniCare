@@ -1,12 +1,16 @@
 package com.unicare.presentation.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unicare.application.dto.request.CreateMedicalCheckupRequest;
 import com.unicare.application.dto.request.PrescribedMedicineRequest;
+import com.unicare.application.dto.request.UpdateMedicalCheckupRequest;
 import com.unicare.application.dto.request.UpdatePrescriptionRequest;
 import com.unicare.application.dto.response.MedicalCheckupDetailResponse;
 import com.unicare.application.dto.response.PrescribedMedicineResponse;
+import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.service.MedicalCheckupService;
 import com.unicare.common.exception.BadRequestException;
+import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
 import com.unicare.presentation.advice.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,13 +26,18 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.security.Principal;
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -46,6 +55,7 @@ class MedicalCheckupControllerTest {
     private MedicalCheckupController medicalCheckupController;
 
     private MedicalCheckupDetailResponse sampleDetailResponse;
+    private MedicalCheckupDetailResponse completedDetailResponse;
     private Principal mockPrincipal;
 
     @BeforeEach
@@ -60,11 +70,20 @@ class MedicalCheckupControllerTest {
         sampleDetailResponse = MedicalCheckupDetailResponse.builder()
                 .id(1L)
                 .checkupCode("PK2611040001")
+                .checkupType("GENERAL")
+                .isEmergency(false)
                 .studentId(10L)
                 .studentCode("24521234")
                 .studentName("Nguyễn Văn Sinh Viên")
                 .staffId(20L)
                 .doctorName("Bác sĩ Nguyễn Văn A")
+                .appointmentId(100L)
+                .appointmentCode("LH2611120001")
+                .symptoms("Sốt 38.5 độ, đau họng")
+                .diagnosisNotes("Viêm họng cấp")
+                .treatmentSuggestions("Nghỉ ngơi, uống nhiều nước")
+                .diseaseGroupId(5)
+                .diseaseGroupName("Cúm mùa")
                 .status("DRAFT")
                 .prescribedMedicines(List.of(
                         PrescribedMedicineResponse.builder()
@@ -75,6 +94,223 @@ class MedicalCheckupControllerTest {
                                 .build()
                 ))
                 .build();
+
+        completedDetailResponse = MedicalCheckupDetailResponse.builder()
+                .id(1L)
+                .checkupCode("PK2611040001")
+                .checkupType("GENERAL")
+                .isEmergency(false)
+                .studentId(10L)
+                .studentCode("24521234")
+                .studentName("Nguyễn Văn Sinh Viên")
+                .staffId(20L)
+                .doctorName("Bác sĩ Nguyễn Văn A")
+                .appointmentId(100L)
+                .appointmentCode("LH2611120001")
+                .symptoms("Sốt 38.5 độ, đau họng")
+                .diagnosisNotes("Viêm họng cấp")
+                .treatmentSuggestions("Nghỉ ngơi, uống nhiều nước")
+                .diseaseGroupId(5)
+                .diseaseGroupName("Cúm mùa")
+                .status("COMPLETED")
+                .completedAt(OffsetDateTime.now())
+                .prescribedMedicines(Collections.emptyList())
+                .build();
+    }
+
+    @Test
+    @DisplayName("GET /api/medical-records/students/search: Tra cứu nhanh sinh viên phục vụ tiếp nhận khẩn cấp (200 OK)")
+    void searchStudentsForIntake_Success() throws Exception {
+        StudentPersonalInfoResponse studentInfo = new StudentPersonalInfoResponse();
+        studentInfo.setStudentId(10L);
+        studentInfo.setStudentCode("24521234");
+        studentInfo.setFullName("Nguyễn Văn Sinh Viên");
+        studentInfo.setClassCode("SE104.O11");
+
+        when(medicalCheckupService.searchStudentsForIntake(eq("24521234"), eq("bs001")))
+                .thenReturn(List.of(studentInfo));
+
+        mockMvc.perform(get("/api/medical-records/students/search")
+                        .param("keyword", "24521234")
+                        .principal(mockPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].studentCode").value("24521234"))
+                .andExpect(jsonPath("$.data[0].fullName").value("Nguyễn Văn Sinh Viên"));
+    }
+
+    @Test
+    @DisplayName("POST /api/medical-records: Tiếp nhận từ lịch hẹn CONFIRMED và tạo phiếu DRAFT thành công (201 Created)")
+    void createCheckup_Draft_Success() throws Exception {
+        when(medicalCheckupService.createCheckup(any(CreateMedicalCheckupRequest.class), eq("bs001")))
+                .thenReturn(sampleDetailResponse);
+
+        CreateMedicalCheckupRequest request = CreateMedicalCheckupRequest.builder()
+                .appointmentId(100L)
+                .symptoms("Sốt 38.5 độ, đau họng")
+                .diagnosisNotes("Viêm họng cấp")
+                .diseaseGroupId(5)
+                .status("DRAFT")
+                .build();
+
+        mockMvc.perform(post("/api/medical-records")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Tiếp nhận sinh viên và tạo phiếu khám thành công"))
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.status").value("DRAFT"));
+    }
+
+    @Test
+    @DisplayName("POST /api/medical-records: Tiếp nhận khẩn cấp và hoàn tất ngay (201 Created)")
+    void createCheckup_EmergencyAndComplete_Success() throws Exception {
+        when(medicalCheckupService.createCheckup(any(CreateMedicalCheckupRequest.class), eq("bs001")))
+                .thenReturn(completedDetailResponse);
+
+        CreateMedicalCheckupRequest request = CreateMedicalCheckupRequest.builder()
+                .studentCode("24521234")
+                .isEmergency(true)
+                .symptoms("Chóng mặt")
+                .diagnosisNotes("Hạ đường huyết")
+                .treatmentSuggestions("Cho uống trà đường")
+                .status("COMPLETED")
+                .build();
+
+        mockMvc.perform(post("/api/medical-records")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Tiếp nhận và hoàn tất phiếu khám thành công"))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+    }
+
+    @Test
+    @DisplayName("POST /api/medical-records: Lịch hẹn đã được lập phiếu khám trước đó -> 409 Conflict")
+    void createCheckup_DuplicateAppointment_Conflict() throws Exception {
+        when(medicalCheckupService.createCheckup(any(CreateMedicalCheckupRequest.class), eq("bs001")))
+                .thenThrow(new DuplicateResourceException("Lịch hẹn này đã được tiếp nhận và lập phiếu khám trước đó"));
+
+        CreateMedicalCheckupRequest request = CreateMedicalCheckupRequest.builder()
+                .appointmentId(100L)
+                .build();
+
+        mockMvc.perform(post("/api/medical-records")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("PUT /api/medical-records/{id}: Lưu nháp (DRAFT) và Hoàn tất (COMPLETED) phiếu khám thành công (200 OK)")
+    void updateCheckup_DraftAndComplete_Success() throws Exception {
+        when(medicalCheckupService.updateCheckup(eq(1L), any(UpdateMedicalCheckupRequest.class), eq("bs001")))
+                .thenReturn(sampleDetailResponse);
+
+        UpdateMedicalCheckupRequest draftReq = UpdateMedicalCheckupRequest.builder()
+                .symptoms("Sốt 38.5 độ")
+                .diagnosisNotes("Viêm họng cấp")
+                .status("DRAFT")
+                .build();
+
+        mockMvc.perform(put("/api/medical-records/1")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(draftReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Lưu nháp phiếu khám thành công"))
+                .andExpect(jsonPath("$.data.status").value("DRAFT"));
+
+        when(medicalCheckupService.updateCheckup(eq(1L), any(UpdateMedicalCheckupRequest.class), eq("bs001")))
+                .thenReturn(completedDetailResponse);
+
+        UpdateMedicalCheckupRequest completeReq = UpdateMedicalCheckupRequest.builder()
+                .symptoms("Sốt 38.5 độ")
+                .diagnosisNotes("Viêm họng cấp")
+                .status("COMPLETED")
+                .build();
+
+        mockMvc.perform(put("/api/medical-records/1")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(completeReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Hoàn tất ca khám và khóa phiếu khám thành công"))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/medical-records/{id}: Chặn sửa khi phiếu đã COMPLETED (400 Bad Request)")
+    void updateCheckup_BlockedWhenCompleted() throws Exception {
+        when(medicalCheckupService.updateCheckup(eq(1L), any(UpdateMedicalCheckupRequest.class), eq("bs001")))
+                .thenThrow(new BadRequestException("Phiếu khám đã hoàn tất (COMPLETED), hồ sơ đã bị khóa Read-only vĩnh viễn và không thể chỉnh sửa"));
+
+        UpdateMedicalCheckupRequest req = UpdateMedicalCheckupRequest.builder()
+                .symptoms("Cố tình sửa")
+                .build();
+
+        mockMvc.perform(put("/api/medical-records/1")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Phiếu khám đã hoàn tất (COMPLETED), hồ sơ đã bị khóa Read-only vĩnh viễn và không thể chỉnh sửa"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/medical-records/{id}/complete: Hoàn tất trực tiếp phiếu khám thành công (200 OK)")
+    void completeCheckup_Success() throws Exception {
+        when(medicalCheckupService.completeCheckup(eq(1L), eq("bs001")))
+                .thenReturn(completedDetailResponse);
+
+        mockMvc.perform(put("/api/medical-records/1/complete")
+                        .principal(mockPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/medical-records/{id}: Xóa phiếu nháp DRAFT thành công và chặn xóa khi COMPLETED")
+    void deleteCheckup_DraftSuccess_CompletedBlocked() throws Exception {
+        doNothing().when(medicalCheckupService).deleteCheckup(1L, "bs001");
+
+        mockMvc.perform(delete("/api/medical-records/1")
+                        .principal(mockPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Xóa phiếu khám nháp thành công"));
+
+        doThrow(new BadRequestException("Phiếu khám đã hoàn tất (COMPLETED), hồ sơ đã bị khóa Read-only vĩnh viễn và không thể xóa"))
+                .when(medicalCheckupService).deleteCheckup(2L, "bs001");
+
+        mockMvc.perform(delete("/api/medical-records/2")
+                        .principal(mockPrincipal))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Phiếu khám đã hoàn tất (COMPLETED), hồ sơ đã bị khóa Read-only vĩnh viễn và không thể xóa"));
+    }
+
+    @Test
+    @DisplayName("GET /api/medical-records/by-appointment/{appointmentId}: Lấy phiếu khám theo lịch hẹn thành công (200 OK)")
+    void getCheckupByAppointment_Success() throws Exception {
+        when(medicalCheckupService.getCheckupByAppointment(eq(100L), eq("bs001")))
+                .thenReturn(sampleDetailResponse);
+
+        mockMvc.perform(get("/api/medical-records/by-appointment/100")
+                        .principal(mockPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.appointmentId").value(100L));
     }
 
     @Test

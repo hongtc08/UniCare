@@ -711,4 +711,34 @@ class HealthProfileServiceImplTest {
         StudentMedicalOverviewResponse nullListCtor = new StudentMedicalOverviewResponse(null, null, null, null);
         assertThat(nullListCtor.getPreviousCheckups()).isEmpty();
     }
+
+    @Test
+    @DisplayName("Bác sĩ tra cứu nhanh sinh viên theo từ khóa (MSSV / Họ tên / Lớp) phục vụ tiếp nhận khẩn cấp")
+    void searchStudentsForDoctor_SuccessAndSecurity() {
+        when(userRepository.findByUsername("NV001")).thenReturn(Optional.of(doctorUser));
+        when(studentRepository.searchStudentsByKeyword("24520579")).thenReturn(List.of(studentEntity));
+
+        List<StudentPersonalInfoResponse> results = healthProfileService.searchStudentsForDoctor("NV001", "  24520579  ");
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).getStudentCode()).isEqualTo("24520579");
+        assertThat(results.get(0).getFullName()).isEqualTo("Tăng Chấn Hồng");
+
+        when(studentRepository.searchStudentsByKeyword("")).thenReturn(List.of());
+        assertThat(healthProfileService.searchStudentsForDoctor("NV001", null)).isEmpty();
+
+        assertThatThrownBy(() -> healthProfileService.searchStudentsForDoctor(null, "2452"))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> healthProfileService.searchStudentsForDoctor("   ", "2452"))
+                .isInstanceOf(AccessDeniedException.class);
+
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(adminUser));
+        assertThatThrownBy(() -> healthProfileService.searchStudentsForDoctor("admin", "2452"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Ban quản lý không được phép truy cập");
+
+        when(userRepository.findByUsername("24520579")).thenReturn(Optional.of(studentUser));
+        assertThatThrownBy(() -> healthProfileService.searchStudentsForDoctor("24520579", "2452"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Chỉ Nhân viên y tế (Bác sĩ)");
+    }
 }
