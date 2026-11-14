@@ -103,6 +103,19 @@ public class MedicalCheckup {
         }
     }
 
+    public boolean isCompleted() {
+        return "COMPLETED".equalsIgnoreCase(this.status);
+    }
+
+    public boolean isEditable() {
+        return !isCompleted();
+    }
+
+    public void markCompleted(OffsetDateTime completedTime) {
+        this.status = "COMPLETED";
+        this.completedAt = completedTime != null ? completedTime : OffsetDateTime.now();
+    }
+
     @PrePersist
     public void prePersist() {
         if (this.createdAt == null) {

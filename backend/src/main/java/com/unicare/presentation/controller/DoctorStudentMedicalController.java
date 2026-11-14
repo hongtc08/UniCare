@@ -5,6 +5,7 @@
 package com.unicare.presentation.controller;
 
 import com.unicare.application.dto.response.StudentMedicalOverviewResponse;
+import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.service.HealthProfileService;
 import com.unicare.common.response.ApiResponse;
 import org.springframework.http.ResponseEntity;
@@ -12,9 +13,11 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/doctor/students")
@@ -25,6 +28,21 @@ public class DoctorStudentMedicalController {
 
     public DoctorStudentMedicalController(HealthProfileService healthProfileService) {
         this.healthProfileService = healthProfileService;
+    }
+
+    /**
+     * Tra cứu nhanh danh sách Sinh viên theo MSSV, Họ tên hoặc Mã/Tên lớp phục vụ Tiếp nhận khẩn cấp / cấp cứu.
+     * GET /api/doctor/students/search?keyword=...
+     */
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<List<StudentPersonalInfoResponse>>> searchStudentsForEmergency(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String q,
+            Principal principal) {
+        String currentUsername = principal != null ? principal.getName() : null;
+        String effectiveKeyword = (keyword != null && !keyword.isBlank()) ? keyword : q;
+        List<StudentPersonalInfoResponse> results = healthProfileService.searchStudentsForDoctor(currentUsername, effectiveKeyword);
+        return ResponseEntity.ok(ApiResponse.success("Tra cứu nhanh danh sách sinh viên thành công", results));
     }
 
     /**

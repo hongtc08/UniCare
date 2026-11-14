@@ -27,6 +27,23 @@ public interface MedicalCheckupRepository extends JpaRepository<MedicalCheckup, 
 
     Optional<MedicalCheckup> findByCheckupCode(String checkupCode);
 
+    boolean existsByCheckupCode(String checkupCode);
+
+    boolean existsByAppointmentId(Long appointmentId);
+
+    @Query("SELECT mc FROM MedicalCheckup mc " +
+           "LEFT JOIN FETCH mc.student s " +
+           "LEFT JOIN FETCH s.user su " +
+           "LEFT JOIN FETCH s.academicClass ac " +
+           "LEFT JOIN FETCH ac.faculty f " +
+           "LEFT JOIN FETCH mc.staff st " +
+           "LEFT JOIN FETCH st.user tu " +
+           "LEFT JOIN FETCH mc.appointment a " +
+           "LEFT JOIN FETCH mc.diseaseGroup dg " +
+           "LEFT JOIN FETCH mc.prescribedMedicines pm " +
+           "WHERE mc.appointment.id = :appointmentId")
+    Optional<MedicalCheckup> findByAppointmentIdWithDetails(@Param("appointmentId") Long appointmentId);
+
     List<MedicalCheckup> findByStudentId(Long studentId);
 
     List<MedicalCheckup> findByStaffId(Long staffId);

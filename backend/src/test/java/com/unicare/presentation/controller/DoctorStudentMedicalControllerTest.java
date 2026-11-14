@@ -147,4 +147,30 @@ class DoctorStudentMedicalControllerTest {
         assertThat(annotation).isNotNull();
         assertThat(annotation.value()).isEqualTo("hasRole('NHAN_VIEN_Y_TE')");
     }
+
+    @Test
+    @DisplayName("GET /api/doctor/students/search - Tra cứu nhanh sinh viên theo keyword hoặc q thành công (200 OK)")
+    void searchStudentsForEmergency_Success() throws Exception {
+        StudentPersonalInfoResponse studentInfo = sampleOverview.getStudentInfo();
+        when(healthProfileService.searchStudentsForDoctor("bs001", "24520579"))
+                .thenReturn(List.of(studentInfo));
+
+        mockMvc.perform(get("/api/doctor/students/search")
+                        .param("keyword", "24520579")
+                        .principal(doctorPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].studentCode").value("24520579"))
+                .andExpect(jsonPath("$.data[0].fullName").value("Tăng Chấn Hồng"));
+
+        when(healthProfileService.searchStudentsForDoctor("bs001", "SE104"))
+                .thenReturn(List.of(studentInfo));
+
+        mockMvc.perform(get("/api/doctor/students/search")
+                        .param("q", "SE104")
+                        .principal(doctorPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].classCode").value("SE104.O11"));
+    }
 }

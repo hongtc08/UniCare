@@ -20,6 +20,8 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            "JOIN FETCH st.user u " +
            "JOIN FETCH a.student std " +
            "JOIN FETCH std.user su " +
+           "LEFT JOIN FETCH std.academicClass ac " +
+           "LEFT JOIN FETCH ac.faculty f " +
            "WHERE a.id = :id")
     Optional<Appointment> findByIdWithDetails(@Param("id") Long id);
 

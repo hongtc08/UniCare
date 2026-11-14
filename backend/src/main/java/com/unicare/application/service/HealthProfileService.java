@@ -9,7 +9,15 @@ import com.unicare.application.dto.response.HealthProfileResponse;
 import com.unicare.application.dto.response.StudentMedicalOverviewResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 
+import java.util.List;
+
 public interface HealthProfileService {
+
+    /**
+     * Tra cứu nhanh danh sách Sinh viên theo MSSV, Họ tên hoặc Mã/Tên lớp phục vụ Tiếp nhận khẩn cấp / cấp cứu.
+     * Chỉ Nhân viên y tế (NHAN_VIEN_Y_TE) mới được phép truy cập.
+     */
+    List<StudentPersonalInfoResponse> searchStudentsForDoctor(String currentUsername, String keyword);
 
     /**
      * Tra cứu Hồ sơ Y tế Tổng hợp của Sinh viên phục vụ Bác sĩ trong ca khám.
