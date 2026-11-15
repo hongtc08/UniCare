@@ -52,4 +52,10 @@ public interface MedicalCheckupService {
      * Bác sĩ kê đơn / cập nhật danh sách thuốc kê đơn đi kèm Phiếu khám.
      */
     MedicalCheckupDetailResponse updatePrescription(Long checkupId, UpdatePrescriptionRequest request, String currentUsername);
+
+    /**
+     * Lấy dòng thời gian (Timeline) toàn bộ lịch sử khám bệnh đã hoàn tất (Đa khoa, Tâm lý, Định kỳ)
+     * kèm đơn thuốc và hồ sơ chuyển viện (nếu có) của chính Sinh viên đang đăng nhập.
+     */
+    List<MedicalCheckupDetailResponse> getStudentMedicalHistory(String currentUsername, Long requestedStudentId);
 }

@@ -7,6 +7,7 @@ import com.unicare.application.dto.request.UpdatePrescriptionRequest;
 import com.unicare.application.dto.response.MedicalCheckupDetailResponse;
 import com.unicare.application.dto.response.PrescribedMedicineResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
+import com.unicare.application.dto.response.TransferRecordResponse;
 import com.unicare.application.service.impl.MedicalCheckupServiceImpl;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.DuplicateResourceException;
@@ -891,5 +892,215 @@ class MedicalCheckupServiceImplTest {
         assertThatThrownBy(() -> medicalCheckupService.updatePrescription(1L, request, "bs001"))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("Tên thuốc không được để trống");
+    }
+
+    // =========================================================================
+    // 5. Tests for getStudentMedicalHistory (Timeline phía Sinh viên)
+    // =========================================================================
+
+    @Test
+    @DisplayName("Timeline lịch sử khám phía Sinh viên: Trả đủ Đa khoa, Tâm lý, Định kỳ, Cấp cứu + Đơn thuốc + Chuyển viện, sắp xếp mới nhất trước và lọc bỏ DRAFT")
+    void getStudentMedicalHistory_Success_AllTypesWithMedicinesAndTransferRecord() {
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        PrescribedMedicine med1 = PrescribedMedicine.builder()
+                .id(101L)
+                .medicineName("Paracetamol 500mg")
+                .quantity(10)
+                .dosageInstruction("Uống 1 viên khi sốt")
+                .build();
+        PrescribedMedicine med2 = PrescribedMedicine.builder()
+                .id(102L)
+                .medicineName("Vitamin C 500mg")
+                .quantity(15)
+                .dosageInstruction("Uống 1 viên sau ăn sáng")
+                .build();
+
+        // 1. Khám đa khoa theo lịch hẹn, có đơn thuốc (cũ nhất)
+        MedicalCheckup generalCheckup = MedicalCheckup.builder()
+                .id(10L)
+                .checkupCode("PK2611010001")
+                .student(student)
+                .staff(doctorStaff)
+                .appointment(confirmedAppointment)
+                .checkupType("GENERAL")
+                .isEmergency(false)
+                .symptoms("Sốt, ho khan")
+                .diagnosisNotes("Cảm cúm")
+                .treatmentSuggestions("Nghỉ ngơi")
+                .diseaseGroup(fluDiseaseGroup)
+                .status("COMPLETED")
+                .createdAt(now.minusDays(5))
+                .completedAt(now.minusDays(5))
+                .prescribedMedicines(new ArrayList<>(List.of(med2, med1)))
+                .build();
+
+        // 2. Tư vấn tâm lý (không thuốc, không chuyển viện)
+        Appointment psychAppointment = Appointment.builder()
+                .id(102L)
+                .appointmentCode("LH2611030001")
+                .student(student)
+                .shift(psychologicalShift)
+                .status("COMPLETED")
+                .build();
+        MedicalCheckup psychCheckup = MedicalCheckup.builder()
+                .id(11L)
+                .checkupCode("PK2611030001")
+                .student(student)
+                .staff(doctorStaff)
+                .appointment(psychAppointment)
+                .checkupType("PSYCHOLOGICAL")
+                .isEmergency(false)
+                .symptoms("Mất ngủ trước kỳ thi")
+                .diagnosisNotes("Căng thẳng nhẹ")
+                .treatmentSuggestions("Thực hành thở 4-7-8")
+                .status("COMPLETED")
+                .createdAt(now.minusDays(3))
+                .completedAt(now.minusDays(3))
+                .build();
+
+        // 3. Khám định kỳ (không qua lịch hẹn, periodicResult = PASSED)
+        MedicalCheckup periodicCheckup = MedicalCheckup.builder()
+                .id(12L)
+                .checkupCode("PK2611050001")
+                .student(student)
+                .staff(doctorStaff)
+                .appointment(null)
+                .checkupType("GENERAL")
+                .isEmergency(false)
+                .periodicResult("PASSED")
+                .symptoms("Khám sức khỏe định kỳ đầu năm")
+                .diagnosisNotes("Sức khỏe loại 1, đạt chuẩn")
+                .status("COMPLETED")
+                .createdAt(now.minusDays(2))
+                .completedAt(now.minusDays(2))
+                .build();
+
+        // 4. Ca cấp cứu có hồ sơ chuyển viện (mới nhất)
+        MedicalCheckup emergencyTransferCheckup = MedicalCheckup.builder()
+                .id(13L)
+                .checkupCode("PK2611100001")
+                .student(student)
+                .staff(doctorStaff)
+                .appointment(null)
+                .checkupType("GENERAL")
+                .isEmergency(true)
+                .symptoms("Ngất xỉu, huyết áp tăng cao")
+                .diagnosisNotes("Cơn tăng huyết áp kịch phát")
+                .treatmentSuggestions("Sơ cứu tại chỗ và chuyển tuyến trên")
+                .status("COMPLETED")
+                .createdAt(now.minusDays(1))
+                .completedAt(now.minusDays(1))
+                .build();
+        TransferRecord transferRecord = TransferRecord.builder()
+                .id(1L)
+                .recordCode("CV2611100001")
+                .medicalCheckup(emergencyTransferCheckup)
+                .targetHospital("Bệnh viện Đa khoa Khu vực Thủ Đức")
+                .reasonCategory("CAP_CUU_NANG")
+                .transferReason("Cần theo dõi tim mạch chuyên sâu")
+                .currentCondition("Đã tỉnh, huyết áp 150/90")
+                .firstAidNotes("Nằm nghỉ, thở oxy")
+                .transferredAt(now.minusDays(1))
+                .build();
+        emergencyTransferCheckup.setTransferRecord(transferRecord);
+
+        // Phiếu nháp DRAFT và phiếu của SV khác (phòng vệ nếu repo trả lẫn) -> phải bị lọc bỏ
+        MedicalCheckup otherStudentCheckup = MedicalCheckup.builder()
+                .id(99L)
+                .checkupCode("PK2611110099")
+                .student(otherStudent)
+                .staff(doctorStaff)
+                .checkupType("GENERAL")
+                .status("COMPLETED")
+                .createdAt(now)
+                .completedAt(now)
+                .build();
+
+        when(medicalCheckupRepository.findCompletedTimelineByStudentIdWithDetails(10L))
+                .thenReturn(List.of(generalCheckup, draftCheckup, otherStudentCheckup, periodicCheckup, emergencyTransferCheckup, psychCheckup));
+
+        List<MedicalCheckupDetailResponse> timeline = medicalCheckupService.getStudentMedicalHistory("sv001", null);
+
+        assertThat(timeline).hasSize(4);
+        assertThat(timeline)
+                .extracting(MedicalCheckupDetailResponse::getCheckupCode)
+                .containsExactly("PK2611100001", "PK2611050001", "PK2611030001", "PK2611010001");
+
+        // Kiểm tra item 0: Cấp cứu + Chuyển viện
+        MedicalCheckupDetailResponse item0 = timeline.get(0);
+        assertThat(item0.getIsEmergency()).isTrue();
+        assertThat(item0.getAppointmentId()).isNull();
+        assertThat(item0.getTimelineCategory()).isEqualTo("GENERAL");
+        TransferRecordResponse transferRes = item0.getTransferRecord();
+        assertThat(transferRes).isNotNull();
+        assertThat(transferRes.getRecordCode()).isEqualTo("CV2611100001");
+        assertThat(transferRes.getTargetHospital()).isEqualTo("Bệnh viện Đa khoa Khu vực Thủ Đức");
+        assertThat(transferRes.getReasonCategory()).isEqualTo("CAP_CUU_NANG");
+
+        // Kiểm tra item 1: Khám định kỳ
+        MedicalCheckupDetailResponse item1 = timeline.get(1);
+        assertThat(item1.getIsPeriodic()).isTrue();
+        assertThat(item1.getPeriodicResult()).isEqualTo("PASSED");
+        assertThat(item1.getTimelineCategory()).isEqualTo("PERIODIC");
+        assertThat(item1.getTransferRecord()).isNull();
+
+        // Kiểm tra item 2: Tư vấn tâm lý + Ca khám
+        MedicalCheckupDetailResponse item2 = timeline.get(2);
+        assertThat(item2.getIsPeriodic()).isFalse();
+        assertThat(item2.getTimelineCategory()).isEqualTo("PSYCHOLOGICAL");
+        assertThat(item2.getRoom()).isEqualTo("Phòng Tâm lý 202");
+        assertThat(item2.getPrescribedMedicines()).isEmpty();
+
+        // Kiểm tra item 3: Khám đa khoa + Đơn thuốc sắp xếp theo ID tăng dần
+        MedicalCheckupDetailResponse item3 = timeline.get(3);
+        assertThat(item3.getTimelineCategory()).isEqualTo("GENERAL");
+        assertThat(item3.getShiftDate()).isEqualTo(generalShift.getShiftDate());
+        assertThat(item3.getPrescribedMedicines())
+                .extracting(PrescribedMedicineResponse::getMedicineName)
+                .containsExactly("Paracetamol 500mg", "Vitamin C 500mg");
+    }
+
+    @Test
+    @DisplayName("Timeline lịch sử khám phía Sinh viên: Chưa từng đi khám trả danh sách rỗng và cho phép truyền đúng studentId của chính mình")
+    void getStudentMedicalHistory_EmptyList_AndMatchingStudentId() {
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+        when(medicalCheckupRepository.findCompletedTimelineByStudentIdWithDetails(10L))
+                .thenReturn(List.of());
+
+        List<MedicalCheckupDetailResponse> result = medicalCheckupService.getStudentMedicalHistory("sv001", 10L);
+
+        assertThat(result).isEmpty();
+        verify(medicalCheckupRepository).findCompletedTimelineByStudentIdWithDetails(10L);
+    }
+
+    @Test
+    @DisplayName("Bảo mật Timeline phía Sinh viên: Chặn tuyệt đối IDOR khi truyền studentId khác và chặn Bác sĩ/Ban quản lý")
+    void getStudentMedicalHistory_Security_BlocksOtherStudentAndNonStudentRoles() {
+        // 1. Sinh viên sv001 (id=10) cố tình truyền requestedStudentId=11 của sv002 -> Chặn 403
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+        assertThatThrownBy(() -> medicalCheckupService.getStudentMedicalHistory("sv001", 11L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Sinh viên tuyệt đối không được phép xem lịch sử khám của sinh viên khác");
+        verify(medicalCheckupRepository, never()).findCompletedTimelineByStudentIdWithDetails(any());
+
+        // 2. Bác sĩ gọi endpoint riêng của sinh viên -> Chặn 403
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        assertThatThrownBy(() -> medicalCheckupService.getStudentMedicalHistory("bs001", null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Chỉ tài khoản sinh viên");
+
+        // 3. Ban quản lý gọi endpoint -> Chặn 403
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(adminUser));
+        assertThatThrownBy(() -> medicalCheckupService.getStudentMedicalHistory("admin", null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Chỉ tài khoản sinh viên");
+
+        // 4. Chưa đăng nhập (principal null) -> Chặn 403
+        assertThatThrownBy(() -> medicalCheckupService.getStudentMedicalHistory(null, null))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Yêu cầu đăng nhập");
     }
 }
