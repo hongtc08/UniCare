@@ -12,7 +12,7 @@ import java.util.Optional;
 @Repository
 public interface MedicalCheckupRepository extends JpaRepository<MedicalCheckup, Long> {
 
-    @Query("SELECT mc FROM MedicalCheckup mc " +
+    @Query("SELECT DISTINCT mc FROM MedicalCheckup mc " +
            "LEFT JOIN FETCH mc.student s " +
            "LEFT JOIN FETCH s.user su " +
            "LEFT JOIN FETCH s.academicClass ac " +
@@ -20,8 +20,10 @@ public interface MedicalCheckupRepository extends JpaRepository<MedicalCheckup, 
            "LEFT JOIN FETCH mc.staff st " +
            "LEFT JOIN FETCH st.user tu " +
            "LEFT JOIN FETCH mc.appointment a " +
+           "LEFT JOIN FETCH a.shift sh " +
            "LEFT JOIN FETCH mc.diseaseGroup dg " +
            "LEFT JOIN FETCH mc.prescribedMedicines pm " +
+           "LEFT JOIN FETCH mc.transferRecord tr " +
            "WHERE mc.id = :id")
     Optional<MedicalCheckup> findByIdWithDetails(@Param("id") Long id);
 
@@ -31,7 +33,7 @@ public interface MedicalCheckupRepository extends JpaRepository<MedicalCheckup, 
 
     boolean existsByAppointmentId(Long appointmentId);
 
-    @Query("SELECT mc FROM MedicalCheckup mc " +
+    @Query("SELECT DISTINCT mc FROM MedicalCheckup mc " +
            "LEFT JOIN FETCH mc.student s " +
            "LEFT JOIN FETCH s.user su " +
            "LEFT JOIN FETCH s.academicClass ac " +
@@ -39,10 +41,30 @@ public interface MedicalCheckupRepository extends JpaRepository<MedicalCheckup, 
            "LEFT JOIN FETCH mc.staff st " +
            "LEFT JOIN FETCH st.user tu " +
            "LEFT JOIN FETCH mc.appointment a " +
+           "LEFT JOIN FETCH a.shift sh " +
            "LEFT JOIN FETCH mc.diseaseGroup dg " +
            "LEFT JOIN FETCH mc.prescribedMedicines pm " +
+           "LEFT JOIN FETCH mc.transferRecord tr " +
            "WHERE mc.appointment.id = :appointmentId")
     Optional<MedicalCheckup> findByAppointmentIdWithDetails(@Param("appointmentId") Long appointmentId);
+
+    // Dùng LEFT JOIN FETCH để lấy đủ cả ca cấp cứu/định kỳ không có appointment và tránh N+1 query
+    @Query("SELECT DISTINCT mc FROM MedicalCheckup mc " +
+           "LEFT JOIN FETCH mc.student s " +
+           "LEFT JOIN FETCH s.user su " +
+           "LEFT JOIN FETCH s.academicClass ac " +
+           "LEFT JOIN FETCH ac.faculty f " +
+           "LEFT JOIN FETCH mc.staff st " +
+           "LEFT JOIN FETCH st.user tu " +
+           "LEFT JOIN FETCH mc.appointment a " +
+           "LEFT JOIN FETCH a.shift sh " +
+           "LEFT JOIN FETCH mc.diseaseGroup dg " +
+           "LEFT JOIN FETCH mc.prescribedMedicines pm " +
+           "LEFT JOIN FETCH mc.transferRecord tr " +
+           "WHERE mc.student.id = :studentId " +
+           "AND UPPER(mc.status) = 'COMPLETED' " +
+           "ORDER BY mc.completedAt DESC, mc.createdAt DESC, mc.id DESC")
+    List<MedicalCheckup> findCompletedTimelineByStudentIdWithDetails(@Param("studentId") Long studentId);
 
     List<MedicalCheckup> findByStudentId(Long studentId);
 
