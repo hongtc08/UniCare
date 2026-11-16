@@ -35,6 +35,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +57,12 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
 
     private static final DateTimeFormatter CODE_DATE_FORMAT = DateTimeFormatter.ofPattern("yyMMdd");
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final Comparator<MedicalCheckup> TIMELINE_COMPARATOR = Comparator
+            .comparing(
+                    (MedicalCheckup mc) -> mc.getCompletedAt() != null ? mc.getCompletedAt() : mc.getCreatedAt(),
+                    Comparator.nullsLast(Comparator.reverseOrder()))
+            .thenComparing(MedicalCheckup::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+            .thenComparing(MedicalCheckup::getId, Comparator.nullsLast(Comparator.reverseOrder()));
 
     private final MedicalCheckupRepository medicalCheckupRepository;
     private final UserRepository userRepository;
@@ -401,6 +408,37 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
 
         MedicalCheckup savedCheckup = medicalCheckupRepository.save(checkup);
         return MedicalCheckupDetailResponse.fromEntity(savedCheckup);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MedicalCheckupDetailResponse> getStudentMedicalHistory(String currentUsername, Long requestedStudentId) {
+        User currentUser = resolveCurrentUser(currentUsername);
+
+        // Chỉ tài khoản Sinh viên mới được truy cập endpoint lịch sử khám cá nhân
+        if (currentUser.getRole() != Role.SINH_VIEN) {
+            throw new AccessDeniedException("Chỉ tài khoản sinh viên mới có quyền xem lịch sử khám cá nhân");
+        }
+
+        // Chặn IDOR nếu request cố tình truyền studentId khác với sinh viên đang đăng nhập
+        if (requestedStudentId != null && !requestedStudentId.equals(currentUser.getId())) {
+            throw new AccessDeniedException("Sinh viên tuyệt đối không được phép xem lịch sử khám của sinh viên khác");
+        }
+
+        List<MedicalCheckup> checkups = medicalCheckupRepository
+                .findCompletedTimelineByStudentIdWithDetails(currentUser.getId());
+        if (checkups == null || checkups.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Lọc bảo vệ kép đảm bảo chỉ trả về phiếu đã COMPLETED của chính sinh viên đang đăng nhập
+        return checkups.stream()
+                .filter(mc -> mc.isCompleted()
+                        && mc.getStudent() != null
+                        && currentUser.getId().equals(mc.getStudent().getId()))
+                .sorted(TIMELINE_COMPARATOR)
+                .map(MedicalCheckupDetailResponse::fromEntity)
+                .toList();
     }
 
     private void applyCompletion(MedicalCheckup checkup) {

@@ -73,10 +73,11 @@ public class MedicalCheckup {
     private OffsetDateTime completedAt;
 
     @OneToMany(mappedBy = "medicalCheckup", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
     @Builder.Default
     private List<PrescribedMedicine> prescribedMedicines = new ArrayList<>();
 
-    @OneToOne(mappedBy = "medicalCheckup", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToOne(mappedBy = "medicalCheckup", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private TransferRecord transferRecord;
 
     public void addPrescribedMedicine(PrescribedMedicine medicine) {
