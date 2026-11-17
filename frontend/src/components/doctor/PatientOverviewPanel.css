@@ -1,0 +1,95 @@
+.patient-overview {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  background: #fff;
+  color: var(--text-main, #17233a);
+  border: 1px solid var(--border-light, #dce3ee);
+  border-radius: 12px;
+}
+
+.patient-overview > h2 {
+  margin: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-light, #dce3ee);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.patient-overview-content {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.patient-overview-identity strong {
+  font-size: 16px;
+}
+
+.patient-overview p {
+  margin: 4px 0 0;
+}
+
+.patient-overview-identity p,
+.patient-overview-group > p,
+.patient-overview-message {
+  color: #475569;
+  font-size: 14px;
+}
+
+.patient-overview-allergy {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light, #dce3ee);
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 14px;
+}
+
+.patient-overview-allergy.has-allergy {
+  border-color: #f1cf9b;
+  background: #fff7e8;
+  color: #78420b;
+}
+
+.patient-overview svg {
+  flex-shrink: 0;
+}
+
+.patient-overview-group h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.patient-overview-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
+  gap: 10px 14px;
+  margin: 10px 0 0;
+}
+
+.patient-overview-fields dt {
+  color: #475569;
+  font-size: 12px;
+}
+
+.patient-overview-fields dd {
+  margin: 3px 0 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.patient-overview-message {
+  padding: 12px 16px 16px;
+}
+
+.patient-overview-message button {
+  min-height: 44px;
+  color: var(--primary-blue, #2454d5);
+  font-weight: 600;
+}
