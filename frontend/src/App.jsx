@@ -15,6 +15,7 @@ import ShiftManagement from "./pages/ShiftManagement";
 import StudentBooking from "./pages/appointments/StudentBooking";
 import MyAppointments from "./pages/appointments/MyAppointments";
 import EmergencyIntake from "./pages/emergency/EmergencyIntake";
+import GeneralExaminationPage from "./pages/doctor/GeneralExaminationPage";
 
 function HomeRedirect() {
   const { user } = useAuth();
@@ -52,7 +53,8 @@ export default function App() {
               >
                 <Route path="/medical-list" element={<MedicalList />} />
                 <Route path="/doctor/appointments" element={<MedicalList />} />
-                <Route path="/doctor/checkups/new" element={<UpcomingFeature />} />
+                <Route path="/doctor/checkups/new" element={<GeneralExaminationPage />} />
+                <Route path="/doctor/checkups/:id" element={<GeneralExaminationPage />} />
                 <Route path="/medical-records" element={<UpcomingFeature />} />
                 <Route path="/emergency" element={<EmergencyIntake />} />
               </Route>
