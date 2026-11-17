@@ -7,13 +7,17 @@ import {
   AlertCircle,
   Save,
   CheckCircle2,
+  Calendar,
+  User,
 } from "lucide-react";
 import { medicalRecordApi } from "../../api/medicalRecordApi";
 import Toast from "../../components/common/Toast";
 import GeneralCheckupForm from "../../components/checkup/GeneralCheckupForm";
 import PatientOverviewWrapper from "../../components/checkup/PatientOverviewWrapper";
 import PrescriptionTable from "../../components/checkup/PrescriptionTable";
+import CompleteCheckupModal from "../../components/checkup/CompleteCheckupModal";
 import { createEmptyMedicine, validateAndCleanMedicines } from "../../utils/prescription";
+import { validateCheckupForm } from "../../utils/checkupValidation";
 
 export default function GeneralExaminationPage() {
   const { id: pathId } = useParams();
@@ -37,6 +41,11 @@ export default function GeneralExaminationPage() {
   const [errors, setErrors] = useState({});
   const [prescriptionErrors, setPrescriptionErrors] = useState({});
   const [toast, setToast] = useState(null);
+
+  // States chống bấm đúp & Modal
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
 
   // Form state lâm sàng (Khớp với Create/UpdateMedicalCheckupRequest DTO)
   const [formData, setFormData] = useState({
@@ -217,6 +226,154 @@ export default function GeneralExaminationPage() {
     studentEmail: checkupDetail?.studentEmail || appointmentData?.studentEmail || "",
   };
 
+  // LUỒNG 1: LƯU NHÁP (DRAFT)
+  const handleSaveDraft = async () => {
+    if (isReadOnly || isSavingDraft || isCompleting) return;
+
+    // Validate danh sách thuốc
+    const presResult = validateAndCleanMedicines(medicines);
+    if (!presResult.isValid) {
+      setPrescriptionErrors(presResult.rowErrors);
+      showToast("Vui lòng kiểm tra và sửa thông tin thuốc bị lỗi trước khi lưu.", "error");
+      return;
+    }
+
+    try {
+      setIsSavingDraft(true);
+      setError(null);
+
+      const payload = {
+        appointmentId: appointmentId ? Number(appointmentId) : undefined,
+        studentId: effectiveStudentId || undefined,
+        isEmergency: Boolean(formData.isEmergency),
+        checkupType: formData.checkupType || "KHAM_DA_KHOA",
+        diseaseGroupId: formData.diseaseGroupId ? Number(formData.diseaseGroupId) : null,
+        symptoms: formData.symptoms?.trim() || null,
+        treatmentSuggestions: formData.treatmentSuggestions?.trim() || null,
+        diagnosisNotes: formData.diagnosisNotes?.trim() || null,
+        status: "DRAFT",
+      };
+
+      let targetId = checkupId;
+      if (!targetId) {
+        // Tạo mới phiếu khám nháp
+        const created = await medicalRecordApi.createCheckup(payload);
+        targetId = created.id;
+        setCheckupId(targetId);
+        setCheckupDetail(created);
+        // Cập nhật URL sang /doctor/checkups/{id} để tránh tạo trùng nếu bấm lại
+        navigate(`/doctor/checkups/${targetId}`, { replace: true });
+      } else {
+        // Cập nhật phiếu khám nháp đã có
+        const updated = await medicalRecordApi.updateCheckup(targetId, payload);
+        setCheckupDetail(updated);
+      }
+
+      // Lưu danh sách thuốc đi kèm
+      const withMedicines = await medicalRecordApi.updatePrescriptions(
+        targetId,
+        presResult.cleanedMedicines
+      );
+
+      setCheckupDetail(withMedicines);
+      setStatus("DRAFT");
+      setMedicines(
+        withMedicines.prescribedMedicines && withMedicines.prescribedMedicines.length > 0
+          ? withMedicines.prescribedMedicines.map((m) => createEmptyMedicine(m))
+          : presResult.cleanedMedicines.map((m) => createEmptyMedicine(m))
+      );
+
+      showToast("Đã lưu nháp phiếu khám thành công!", "success");
+    } catch (err) {
+      console.error("Lỗi khi lưu nháp phiếu khám:", err);
+      const msg = err?.response?.data?.message || err?.message || "Không thể lưu nháp phiếu khám.";
+      setError(msg);
+      showToast(msg, "error");
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  // LUỒNG 2: MỞ MODAL XÁC NHẬN HOÀN TẤT CA KHÁM
+  const handleOpenCompleteModal = () => {
+    if (isReadOnly || isSavingDraft || isCompleting) return;
+
+    // Validate toàn diện form lâm sàng & đơn thuốc
+    const formVal = validateCheckupForm(formData, true);
+    const presVal = validateAndCleanMedicines(medicines);
+
+    if (!formVal.isValid || !presVal.isValid) {
+      setErrors(formVal.errors || {});
+      setPrescriptionErrors(presVal.rowErrors || {});
+      showToast("Vui lòng điền đầy đủ các thông tin bắt buộc trước khi hoàn tất.", "error");
+      return;
+    }
+
+    setErrors({});
+    setPrescriptionErrors({});
+    setConfirmModalOpen(true);
+  };
+
+  // LUỒNG 3: XÁC NHẬN HOÀN TẤT TRONG MODAL (3 BƯỚC TUẦN TỰ)
+  const handleConfirmComplete = async () => {
+    const presResult = validateAndCleanMedicines(medicines);
+
+    try {
+      setIsCompleting(true);
+      setError(null);
+
+      const checkupPayload = {
+        appointmentId: appointmentId ? Number(appointmentId) : undefined,
+        studentId: effectiveStudentId || undefined,
+        isEmergency: Boolean(formData.isEmergency),
+        checkupType: formData.checkupType || "KHAM_DA_KHOA",
+        diseaseGroupId: formData.diseaseGroupId ? Number(formData.diseaseGroupId) : null,
+        symptoms: formData.symptoms?.trim() || null,
+        treatmentSuggestions: formData.treatmentSuggestions?.trim() || null,
+        diagnosisNotes: formData.diagnosisNotes?.trim() || null,
+        status: "DRAFT", // BẮT BUỘC lưu với DRAFT để có targetId và có thể lưu đơn thuốc
+      };
+
+      // BƯỚC A: Lưu thông tin lâm sàng ở trạng thái DRAFT
+      let targetId = checkupId;
+      if (!targetId) {
+        const created = await medicalRecordApi.createCheckup(checkupPayload);
+        targetId = created.id;
+        setCheckupId(targetId);
+      } else {
+        await medicalRecordApi.updateCheckup(targetId, checkupPayload);
+      }
+
+      // BƯỚC B: Lưu đơn thuốc (khi phiếu vẫn đang là DRAFT)
+      await medicalRecordApi.updatePrescriptions(targetId, presResult.cleanedMedicines);
+
+      // BƯỚC C: Chốt trạng thái COMPLETED, khóa cứng Read-only
+      const completed = await medicalRecordApi.completeCheckup(targetId);
+
+      // Cập nhật giao diện sang chế độ Chỉ đọc ngay lập tức
+      setCheckupId(targetId);
+      setCheckupDetail(completed);
+      setStatus("COMPLETED");
+      setMedicines(
+        completed.prescribedMedicines && completed.prescribedMedicines.length > 0
+          ? completed.prescribedMedicines.map((m) => createEmptyMedicine(m))
+          : []
+      );
+      setConfirmModalOpen(false);
+
+      showToast("Hoàn tất ca khám thành công! Phiếu khám đã được chuyển sang chế độ Chỉ đọc.", "success");
+      navigate(`/doctor/checkups/${targetId}`, { replace: true });
+    } catch (err) {
+      console.error("Lỗi khi hoàn tất ca khám:", err);
+      const msg = err?.response?.data?.message || err?.message || "Không thể hoàn tất ca khám.";
+      setError(msg);
+      showToast(msg, "error");
+      setConfirmModalOpen(false);
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Toast thông báo */}
@@ -276,25 +433,46 @@ export default function GeneralExaminationPage() {
           </div>
         </div>
 
-        {/* Cụm nút thao tác đầu trang */}
+        {/* CỤM NÚT THAO TÁC ĐẦU TRANG */}
         <div className="flex items-center gap-2">
           {!isReadOnly && (
             <>
               <button
                 type="button"
-                disabled={loading}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-xs"
+                onClick={handleSaveDraft}
+                disabled={loading || isSavingDraft || isCompleting}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 active:bg-slate-100 disabled:opacity-50 transition-colors shadow-xs"
               >
-                <Save className="w-4 h-4 text-slate-500" />
-                Lưu nháp
+                {isSavingDraft ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+                    <span>Đang lưu nháp...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 text-slate-500" />
+                    <span>Lưu nháp</span>
+                  </>
+                )}
               </button>
+
               <button
                 type="button"
-                disabled={loading}
+                onClick={handleOpenCompleteModal}
+                disabled={loading || isSavingDraft || isCompleting}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 rounded-lg transition-colors shadow-xs"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                Hoàn tất ca khám
+                {isCompleting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Đang hoàn tất...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Hoàn tất ca khám</span>
+                  </>
+                )}
               </button>
             </>
           )}
@@ -319,7 +497,7 @@ export default function GeneralExaminationPage() {
           <div>
             <span className="font-bold">Chế độ Chỉ đọc vĩnh viễn:</span> Phiếu
             khám này đã được hoàn tất ca khám. Toàn bộ thông tin chẩn đoán, biện
-            pháp sơ cứu và đơn thuốc đã được khóa cứng và không thể chỉnh sửa.
+            pháp sơ cứu và đơn thuốc đã được khóa cứng và không thể chỉnh sửa hay xóa.
           </div>
         </div>
       )}
@@ -359,9 +537,47 @@ export default function GeneralExaminationPage() {
               isReadOnly={isReadOnly}
               rowErrors={prescriptionErrors}
             />
+
+            {/* CỤM NÚT DƯỚI FORM */}
+            {!isReadOnly && (
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  disabled={isSavingDraft || isCompleting}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 active:bg-slate-100 disabled:opacity-50 transition-colors shadow-xs"
+                >
+                  <Save className="w-4 h-4 text-slate-500" />
+                  <span>{isSavingDraft ? "Đang lưu..." : "Lưu nháp phiếu khám"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenCompleteModal}
+                  disabled={isSavingDraft || isCompleting}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 rounded-lg transition-colors shadow-xs"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isCompleting ? "Đang xử lý..." : "Hoàn tất ca khám"}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {/* MODAL XÁC NHẬN HOÀN TẤT CA KHÁM */}
+      <CompleteCheckupModal
+        isOpen={confirmModalOpen}
+        onClose={() => setConfirmModalOpen(false)}
+        onConfirm={handleConfirmComplete}
+        submitting={isCompleting}
+        checkupInfo={{
+          studentName: fallbackStudentData.studentName,
+          studentCode: fallbackStudentData.studentCode,
+          medicinesCount: validateAndCleanMedicines(medicines).cleanedMedicines.length,
+        }}
+      />
     </div>
   );
 }

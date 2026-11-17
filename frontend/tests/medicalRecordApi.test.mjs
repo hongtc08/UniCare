@@ -251,6 +251,62 @@ test("medicalRecordApi.getAppointmentById calls GET /appointments/{id}", async (
   }
 });
 
+test("completion flow executes 3 steps in order: DRAFT create/update -> prescriptions -> complete", async () => {
+  const callHistory = [];
+  const originalPost = axiosClient.post;
+  const originalPut = axiosClient.put;
+
+  try {
+    axiosClient.post = async (url, body) => {
+      callHistory.push({ method: "POST", url, status: body?.status });
+      return {
+        success: true,
+        data: { id: 777, status: body?.status || "DRAFT" },
+      };
+    };
+
+    axiosClient.put = async (url, body) => {
+      callHistory.push({ method: "PUT", url, body });
+      return {
+        success: true,
+        data: { id: 777, status: url.endsWith("/complete") ? "COMPLETED" : "DRAFT" },
+      };
+    };
+
+    // Step A: Create checkup with status DRAFT
+    const created = await medicalRecordApi.createCheckup({
+      appointmentId: 10,
+      symptoms: "Sốt",
+      diagnosisNotes: "Viêm họng",
+      status: "DRAFT",
+    });
+
+    // Step B: Update prescriptions while DRAFT
+    await medicalRecordApi.updatePrescriptions(created.id, [
+      { medicineName: "Paracetamol", quantity: 10, dosageInstruction: "Ngày 2 viên" },
+    ]);
+
+    // Step C: Complete checkup
+    const completed = await medicalRecordApi.completeCheckup(created.id);
+
+    assert.equal(callHistory.length, 3);
+    assert.equal(callHistory[0].method, "POST");
+    assert.equal(callHistory[0].url, "/medical-records");
+    assert.equal(callHistory[0].status, "DRAFT"); // Crucial: must be DRAFT
+
+    assert.equal(callHistory[1].method, "PUT");
+    assert.equal(callHistory[1].url, "/medical-records/777/prescriptions");
+
+    assert.equal(callHistory[2].method, "PUT");
+    assert.equal(callHistory[2].url, "/medical-records/777/complete");
+
+    assert.equal(completed.status, "COMPLETED");
+  } finally {
+    axiosClient.post = originalPost;
+    axiosClient.put = originalPut;
+  }
+});
+
 test("medicalRecordApi rejects on backend failure envelope", async () => {
   const originalPost = axiosClient.post;
 
