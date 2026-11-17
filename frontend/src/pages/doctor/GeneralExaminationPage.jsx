@@ -7,12 +7,13 @@ import {
   AlertCircle,
   Save,
   CheckCircle2,
-  Pill,
 } from "lucide-react";
 import { medicalRecordApi } from "../../api/medicalRecordApi";
 import Toast from "../../components/common/Toast";
 import GeneralCheckupForm from "../../components/checkup/GeneralCheckupForm";
 import PatientOverviewWrapper from "../../components/checkup/PatientOverviewWrapper";
+import PrescriptionTable from "../../components/checkup/PrescriptionTable";
+import { createEmptyMedicine, validateAndCleanMedicines } from "../../utils/prescription";
 
 export default function GeneralExaminationPage() {
   const { id: pathId } = useParams();
@@ -34,6 +35,7 @@ export default function GeneralExaminationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [errors, setErrors] = useState({});
+  const [prescriptionErrors, setPrescriptionErrors] = useState({});
   const [toast, setToast] = useState(null);
 
   // Form state lâm sàng (Khớp với Create/UpdateMedicalCheckupRequest DTO)
@@ -46,7 +48,7 @@ export default function GeneralExaminationPage() {
     diagnosisNotes: "",
   });
 
-  // State danh sách đơn thuốc động (Chuẩn bị cho Bước 3)
+  // State danh sách đơn thuốc động
   const [medicines, setMedicines] = useState([]);
 
   // Trạng thái phiếu khám: DRAFT hoặc COMPLETED
@@ -72,6 +74,16 @@ export default function GeneralExaminationPage() {
         delete next[field];
         return next;
       });
+    }
+  };
+
+  // Cập nhật danh sách thuốc kê đơn động
+  const handleMedicinesChange = (updatedMedicines) => {
+    if (isReadOnly) return;
+    setMedicines(updatedMedicines);
+
+    if (Object.keys(prescriptionErrors).length > 0) {
+      setPrescriptionErrors({});
     }
   };
 
@@ -106,12 +118,7 @@ export default function GeneralExaminationPage() {
           });
           setMedicines(
             detail.prescribedMedicines && detail.prescribedMedicines.length > 0
-              ? detail.prescribedMedicines.map((m) => ({
-                  id: m.id,
-                  medicineName: m.medicineName || "",
-                  quantity: m.quantity || 1,
-                  dosageInstruction: m.dosageInstruction || "",
-                }))
+              ? detail.prescribedMedicines.map((m) => createEmptyMedicine(m))
               : []
           );
         }
@@ -136,12 +143,7 @@ export default function GeneralExaminationPage() {
             });
             setMedicines(
               existing.prescribedMedicines && existing.prescribedMedicines.length > 0
-                ? existing.prescribedMedicines.map((m) => ({
-                    id: m.id,
-                    medicineName: m.medicineName || "",
-                    quantity: m.quantity || 1,
-                    dosageInstruction: m.dosageInstruction || "",
-                  }))
+                ? existing.prescribedMedicines.map((m) => createEmptyMedicine(m))
                 : []
             );
             return;
@@ -350,20 +352,13 @@ export default function GeneralExaminationPage() {
               diseaseGroupNameFallback={checkupDetail?.diseaseGroupName}
             />
 
-            {/* Khung Bảng Kê đơn thuốc (Sẽ triển khai chi tiết ở Bước 3) */}
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-              <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-                <Pill className="w-4 h-4 text-emerald-600" />
-                <h2 className="text-sm font-bold text-slate-800">
-                  Kê đơn thuốc điện tử
-                </h2>
-              </div>
-              <div className="p-8 border-2 border-dashed border-slate-200 rounded-lg text-center text-xs text-slate-500">
-                [Khung Component Bảng Kê đơn thuốc động - Sẽ triển khai chi tiết ở Bước 3]
-                <br />
-                (Thêm / xóa dòng thuốc động, Tên thuốc, Số lượng, Hướng dẫn liều dùng)
-              </div>
-            </div>
+            {/* Bảng Kê đơn thuốc điện tử động */}
+            <PrescriptionTable
+              medicines={medicines}
+              onChange={handleMedicinesChange}
+              isReadOnly={isReadOnly}
+              rowErrors={prescriptionErrors}
+            />
           </div>
         </div>
       )}
