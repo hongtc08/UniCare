@@ -167,4 +167,14 @@ export const medicalRecordApi = {
     );
     return unwrap(response);
   },
+
+  /**
+   * Tra cứu thông tin chi tiết Lịch hẹn theo ID
+   * GET /api/appointments/{id}
+   * @param {number|string} id
+   */
+  async getAppointmentById(id) {
+    const response = await axiosClient.get(`/appointments/${encodeURIComponent(id)}`);
+    return unwrap(response);
+  },
 };

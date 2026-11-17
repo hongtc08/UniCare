@@ -2,18 +2,17 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
-  FileText,
   Lock,
   Clock,
-  User,
   AlertCircle,
   Save,
   CheckCircle2,
-  Stethoscope,
   Pill,
 } from "lucide-react";
 import { medicalRecordApi } from "../../api/medicalRecordApi";
 import Toast from "../../components/common/Toast";
+import GeneralCheckupForm from "../../components/checkup/GeneralCheckupForm";
+import PatientOverviewWrapper from "../../components/checkup/PatientOverviewWrapper";
 
 export default function GeneralExaminationPage() {
   const { id: pathId } = useParams();
@@ -23,21 +22,25 @@ export default function GeneralExaminationPage() {
   // Params từ URL
   const appointmentId = searchParams.get("appointmentId");
   const studentIdParam = searchParams.get("studentId");
-  const isEmergency =
+  const isEmergencyParam =
     searchParams.get("isEmergency") === "true" ||
     searchParams.get("emergency") === "true";
 
   // State quản lý phiếu khám
   const [checkupId, setCheckupId] = useState(pathId ? Number(pathId) : null);
   const [checkupDetail, setCheckupDetail] = useState(null);
+  const [appointmentData, setAppointmentData] = useState(null);
   const [diseaseGroups, setDiseaseGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [errors, setErrors] = useState({});
   const [toast, setToast] = useState(null);
 
-  // Form state lâm sàng (Chuẩn bị cho Bước 2)
+  // Form state lâm sàng (Khớp với Create/UpdateMedicalCheckupRequest DTO)
   const [formData, setFormData] = useState({
-    diseaseGroupId: "",
+    checkupType: "KHAM_DA_KHOA",
+    isEmergency: isEmergencyParam,
+    diseaseGroupId: null,
     symptoms: "",
     treatmentSuggestions: "",
     diagnosisNotes: "",
@@ -55,6 +58,23 @@ export default function GeneralExaminationPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  // Cập nhật từng trường của Form khám lâm sàng
+  const handleFormChange = (field, value) => {
+    if (isReadOnly) return;
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+
+    if (errors[field]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+  };
+
   // Nạp dữ liệu ban đầu
   const loadInitialData = useCallback(async () => {
     setLoading(true);
@@ -69,7 +89,7 @@ export default function GeneralExaminationPage() {
         console.warn("Không thể tải danh mục nhóm bệnh:", err);
       }
 
-      // 2. Nạp dữ liệu phiếu khám nếu có ID trên path param
+      // 2. Nạp dữ liệu phiếu khám nếu có ID trên path param (/doctor/checkups/:id)
       if (pathId) {
         const detail = await medicalRecordApi.getCheckupDetail(pathId);
         if (detail) {
@@ -77,7 +97,9 @@ export default function GeneralExaminationPage() {
           setCheckupDetail(detail);
           setStatus(detail.status || "DRAFT");
           setFormData({
-            diseaseGroupId: detail.diseaseGroupId || "",
+            checkupType: detail.checkupType || "KHAM_DA_KHOA",
+            isEmergency: Boolean(detail.isEmergency),
+            diseaseGroupId: detail.diseaseGroupId ? Number(detail.diseaseGroupId) : null,
             symptoms: detail.symptoms || "",
             treatmentSuggestions: detail.treatmentSuggestions || "",
             diagnosisNotes: detail.diagnosisNotes || "",
@@ -105,7 +127,9 @@ export default function GeneralExaminationPage() {
             setCheckupDetail(existing);
             setStatus(existing.status || "DRAFT");
             setFormData({
-              diseaseGroupId: existing.diseaseGroupId || "",
+              checkupType: existing.checkupType || "KHAM_DA_KHOA",
+              isEmergency: Boolean(existing.isEmergency),
+              diseaseGroupId: existing.diseaseGroupId ? Number(existing.diseaseGroupId) : null,
               symptoms: existing.symptoms || "",
               treatmentSuggestions: existing.treatmentSuggestions || "",
               diagnosisNotes: existing.diagnosisNotes || "",
@@ -134,10 +158,32 @@ export default function GeneralExaminationPage() {
             console.warn("Lỗi kiểm tra phiếu khám theo lịch hẹn:", err);
           }
         }
+
+        // Tải thông tin lịch hẹn để điền trước thông tin sinh viên & triệu chứng khởi phát
+        try {
+          const appt = await medicalRecordApi.getAppointmentById(appointmentId);
+          if (appt) {
+            setAppointmentData(appt);
+            setFormData((prev) => ({
+              ...prev,
+              symptoms: prev.symptoms || appt.reasonSymptoms || "",
+              checkupType:
+                appt.shiftType === "TU_VAN_TAM_LY"
+                  ? "TU_VAN_TAM_LY"
+                  : "KHAM_DA_KHOA",
+              isEmergency: false,
+            }));
+          }
+        } catch (err) {
+          console.warn("Không thể tải chi tiết lịch hẹn ban đầu:", err);
+        }
       }
 
-      // 4. Trường hợp tạo mới hoàn toàn (chưa có phiếu)
+      // 4. Mặc định tạo mới hoàn toàn
       setStatus("DRAFT");
+      if (isEmergencyParam) {
+        setFormData((prev) => ({ ...prev, isEmergency: true }));
+      }
     } catch (err) {
       console.error("Lỗi nạp dữ liệu phiếu khám:", err);
       setError(
@@ -148,11 +194,26 @@ export default function GeneralExaminationPage() {
     } finally {
       setLoading(false);
     }
-  }, [pathId, appointmentId]);
+  }, [pathId, appointmentId, isEmergencyParam]);
 
   useEffect(() => {
     loadInitialData();
   }, [loadInitialData]);
+
+  // Xác định studentId và thông tin sinh viên dự phòng
+  const effectiveStudentId =
+    checkupDetail?.studentId ||
+    appointmentData?.studentId ||
+    (studentIdParam ? Number(studentIdParam) : null);
+
+  const fallbackStudentData = {
+    studentName: checkupDetail?.studentName || appointmentData?.studentName || "",
+    studentCode: checkupDetail?.studentCode || appointmentData?.studentCode || "",
+    className: checkupDetail?.className || "",
+    facultyName: checkupDetail?.facultyName || "",
+    studentPhone: checkupDetail?.studentPhone || appointmentData?.studentPhone || "",
+    studentEmail: checkupDetail?.studentEmail || appointmentData?.studentEmail || "",
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -200,11 +261,11 @@ export default function GeneralExaminationPage() {
                 ? `Mã phiếu: ${checkupDetail.checkupCode}`
                 : appointmentId
                 ? `Tiếp nhận từ Lịch hẹn #${appointmentId}`
-                : isEmergency
+                : isEmergencyParam || formData.isEmergency
                 ? "Tiếp nhận khẩn cấp / Cấp cứu"
                 : "Ca khám đa khoa"}
               {checkupDetail?.completedAt && (
-                <span className="ml-2">
+                <span className="ml-2 font-medium text-emerald-700">
                   · Hoàn tất lúc:{" "}
                   {new Date(checkupDetail.completedAt).toLocaleString("vi-VN")}
                 </span>
@@ -213,7 +274,7 @@ export default function GeneralExaminationPage() {
           </div>
         </div>
 
-        {/* Nút thao tác đầu trang (Placeholder trước khi ghép logic hoàn chỉnh ở Bước 4) */}
+        {/* Cụm nút thao tác đầu trang */}
         <div className="flex items-center gap-2">
           {!isReadOnly && (
             <>
@@ -269,69 +330,27 @@ export default function GeneralExaminationPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* CỘT TRÁI (4 cols): KHUNG TÓM TẮT THÔNG TIN BỆNH NHÂN (FE1 Integration Point) */}
+          {/* CỘT TRÁI (4 cols): HỒ SƠ Y TẾ TỔNG HỢP CỦA SINH VIÊN */}
           <div className="lg:col-span-4 space-y-4">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-              <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-100">
-                <User className="w-4 h-4 text-blue-600" />
-                <h2 className="text-sm font-bold text-slate-800">
-                  Thông tin Sinh viên
-                </h2>
-              </div>
-              <div className="space-y-2 text-xs">
-                <div>
-                  <span className="text-slate-400 block">Họ và tên:</span>
-                  <span className="font-semibold text-slate-800 text-sm">
-                    {checkupDetail?.studentName || "Đang tải thông tin..."}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div>
-                    <span className="text-slate-400 block">MSSV:</span>
-                    <span className="font-medium text-slate-700">
-                      {checkupDetail?.studentCode || "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Lớp:</span>
-                    <span className="font-medium text-slate-700">
-                      {checkupDetail?.className || "—"}
-                    </span>
-                  </div>
-                </div>
-                <div className="pt-1">
-                  <span className="text-slate-400 block">Khoa:</span>
-                  <span className="font-medium text-slate-700">
-                    {checkupDetail?.facultyName || "—"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Ghi chú tích hợp FE1 PatientOverviewPanel */}
-              <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 italic">
-                * Khung này sẽ nhúng component PatientOverviewPanel từ FE1 (Dị ứng, BHYT, Tiền sử bệnh).
-              </div>
-            </div>
+            <PatientOverviewWrapper
+              studentId={effectiveStudentId}
+              fallbackData={fallbackStudentData}
+            />
           </div>
 
           {/* CỘT PHẢI (8 cols): FORM PHIẾU KHÁM & BẢNG KÊ ĐƠN THUỐC */}
           <div className="lg:col-span-8 space-y-6">
-            {/* Khung Form Phiếu khám (Sẽ thay bằng GeneralCheckupForm ở Bước 2) */}
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-              <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
-                <Stethoscope className="w-4 h-4 text-blue-600" />
-                <h2 className="text-sm font-bold text-slate-800">
-                  Thông tin Chuyên môn & Chẩn đoán lâm sàng
-                </h2>
-              </div>
-              <div className="p-8 border-2 border-dashed border-slate-200 rounded-lg text-center text-xs text-slate-500">
-                [Khung Component Form Phiếu khám Đa khoa - Sẽ triển khai chi tiết ở Bước 2]
-                <br />
-                (Nhóm bệnh dịch tễ, Triệu chứng, Biện pháp sơ cứu, Kết luận chẩn đoán)
-              </div>
-            </div>
+            {/* Form Phiếu khám Đa khoa */}
+            <GeneralCheckupForm
+              formData={formData}
+              onChange={handleFormChange}
+              diseaseGroups={diseaseGroups}
+              isReadOnly={isReadOnly}
+              errors={errors}
+              diseaseGroupNameFallback={checkupDetail?.diseaseGroupName}
+            />
 
-            {/* Khung Bảng Kê đơn thuốc (Sẽ thay bằng PrescriptionTable ở Bước 3) */}
+            {/* Khung Bảng Kê đơn thuốc (Sẽ triển khai chi tiết ở Bước 3) */}
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
               <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">
                 <Pill className="w-4 h-4 text-emerald-600" />

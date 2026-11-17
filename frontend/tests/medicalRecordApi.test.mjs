@@ -197,6 +197,60 @@ test("medicalRecordApi.getDiseaseGroups forwards search query param", async () =
   }
 });
 
+test("medicalRecordApi.getStudentMedicalOverview calls GET /doctor/students/{studentId}/medical-overview", async () => {
+  const originalGet = axiosClient.get;
+  let capturedUrl = "";
+
+  try {
+    axiosClient.get = async (url) => {
+      capturedUrl = url;
+      return {
+        success: true,
+        data: {
+          studentInfo: { fullName: "Nguyễn Văn An", studentCode: "20240001" },
+          healthProfile: { bmi: 21.5, allergies: "Không" },
+          healthInsurance: { cardNumber: "SV12345678" },
+        },
+      };
+    };
+
+    const result = await medicalRecordApi.getStudentMedicalOverview(12);
+
+    assert.equal(capturedUrl, "/doctor/students/12/medical-overview");
+    assert.equal(result.studentInfo.fullName, "Nguyễn Văn An");
+    assert.equal(result.healthProfile.bmi, 21.5);
+  } finally {
+    axiosClient.get = originalGet;
+  }
+});
+
+test("medicalRecordApi.getAppointmentById calls GET /appointments/{id}", async () => {
+  const originalGet = axiosClient.get;
+  let capturedUrl = "";
+
+  try {
+    axiosClient.get = async (url) => {
+      capturedUrl = url;
+      return {
+        success: true,
+        data: {
+          id: 55,
+          studentId: 12,
+          reasonSymptoms: "Đau đầu, chóng mặt",
+        },
+      };
+    };
+
+    const result = await medicalRecordApi.getAppointmentById(55);
+
+    assert.equal(capturedUrl, "/appointments/55");
+    assert.equal(result.id, 55);
+    assert.equal(result.reasonSymptoms, "Đau đầu, chóng mặt");
+  } finally {
+    axiosClient.get = originalGet;
+  }
+});
+
 test("medicalRecordApi rejects on backend failure envelope", async () => {
   const originalPost = axiosClient.post;
 
