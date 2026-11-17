@@ -14,6 +14,7 @@ import Catalogs from "./pages/admin/Catalogs";
 import ShiftManagement from "./pages/ShiftManagement";
 import StudentBooking from "./pages/appointments/StudentBooking";
 import MyAppointments from "./pages/appointments/MyAppointments";
+import EmergencyIntake from "./pages/emergency/EmergencyIntake";
 
 function HomeRedirect() {
   const { user } = useAuth();
@@ -53,7 +54,7 @@ export default function App() {
                 <Route path="/doctor/appointments" element={<MedicalList />} />
                 <Route path="/doctor/checkups/new" element={<UpcomingFeature />} />
                 <Route path="/medical-records" element={<UpcomingFeature />} />
-                <Route path="/emergency" element={<UpcomingFeature />} />
+                <Route path="/emergency" element={<EmergencyIntake />} />
               </Route>
               {/* Phân hệ Quản lý Lịch trực & Mở ca khám: Chỉ dành cho Bác sĩ/Nhân viên y tế và Quản lý */}
               <Route
