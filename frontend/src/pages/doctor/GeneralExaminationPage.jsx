@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -7,8 +7,6 @@ import {
   AlertCircle,
   Save,
   CheckCircle2,
-  Calendar,
-  User,
 } from "lucide-react";
 import { medicalRecordApi } from "../../api/medicalRecordApi";
 import Toast from "../../components/common/Toast";
@@ -97,119 +95,129 @@ export default function GeneralExaminationPage() {
   };
 
   // Nạp dữ liệu ban đầu
-  const loadInitialData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    let active = true;
 
-    try {
-      // 1. Tải danh mục nhóm bệnh dịch tễ
+    async function initializeCheckup() {
       try {
-        const groups = await medicalRecordApi.getDiseaseGroups();
-        setDiseaseGroups(groups || []);
-      } catch (err) {
-        console.warn("Không thể tải danh mục nhóm bệnh:", err);
-      }
-
-      // 2. Nạp dữ liệu phiếu khám nếu có ID trên path param (/doctor/checkups/:id)
-      if (pathId) {
-        const detail = await medicalRecordApi.getCheckupDetail(pathId);
-        if (detail) {
-          setCheckupId(detail.id);
-          setCheckupDetail(detail);
-          setStatus(detail.status || "DRAFT");
-          setFormData({
-            checkupType: detail.checkupType || "KHAM_DA_KHOA",
-            isEmergency: Boolean(detail.isEmergency),
-            diseaseGroupId: detail.diseaseGroupId ? Number(detail.diseaseGroupId) : null,
-            symptoms: detail.symptoms || "",
-            treatmentSuggestions: detail.treatmentSuggestions || "",
-            diagnosisNotes: detail.diagnosisNotes || "",
-          });
-          setMedicines(
-            detail.prescribedMedicines && detail.prescribedMedicines.length > 0
-              ? detail.prescribedMedicines.map((m) => createEmptyMedicine(m))
-              : []
-          );
-        }
-        return;
-      }
-
-      // 3. Nếu mở từ lịch hẹn (appointmentId), kiểm tra xem lịch hẹn đã có phiếu khám chưa
-      if (appointmentId) {
+        // 1. Tải danh mục nhóm bệnh dịch tễ
         try {
-          const existing = await medicalRecordApi.getCheckupByAppointment(appointmentId);
-          if (existing) {
-            setCheckupId(existing.id);
-            setCheckupDetail(existing);
-            setStatus(existing.status || "DRAFT");
+          const groups = await medicalRecordApi.getDiseaseGroups();
+          if (active) {
+            setDiseaseGroups(groups || []);
+          }
+        } catch (err) {
+          console.warn("Không thể tải danh mục nhóm bệnh:", err);
+        }
+
+        // 2. Nạp dữ liệu phiếu khám nếu có ID trên path param (/doctor/checkups/:id)
+        if (pathId) {
+          const detail = await medicalRecordApi.getCheckupDetail(pathId);
+          if (active && detail) {
+            setCheckupId(detail.id);
+            setCheckupDetail(detail);
+            setStatus(detail.status || "DRAFT");
             setFormData({
-              checkupType: existing.checkupType || "KHAM_DA_KHOA",
-              isEmergency: Boolean(existing.isEmergency),
-              diseaseGroupId: existing.diseaseGroupId ? Number(existing.diseaseGroupId) : null,
-              symptoms: existing.symptoms || "",
-              treatmentSuggestions: existing.treatmentSuggestions || "",
-              diagnosisNotes: existing.diagnosisNotes || "",
+              checkupType: detail.checkupType || "KHAM_DA_KHOA",
+              isEmergency: Boolean(detail.isEmergency),
+              diseaseGroupId: detail.diseaseGroupId ? Number(detail.diseaseGroupId) : null,
+              symptoms: detail.symptoms || "",
+              treatmentSuggestions: detail.treatmentSuggestions || "",
+              diagnosisNotes: detail.diagnosisNotes || "",
             });
             setMedicines(
-              existing.prescribedMedicines && existing.prescribedMedicines.length > 0
-                ? existing.prescribedMedicines.map((m) => createEmptyMedicine(m))
+              detail.prescribedMedicines && detail.prescribedMedicines.length > 0
+                ? detail.prescribedMedicines.map((m) => createEmptyMedicine(m))
                 : []
             );
-            return;
           }
-        } catch (err) {
-          // BẮT BUỘC: Xử lý catch lỗi êm nếu backend trả về 404 (chưa tạo phiếu cho lịch hẹn này)
-          // Khởi tạo form trống, tuyệt đối không báo lỗi đỏ cho người dùng.
-          const isNotFound =
-            err?.response?.status === 404 ||
-            err?.status === 404 ||
-            String(err?.message || "").includes("Không tìm thấy");
+          return;
+        }
 
-          if (!isNotFound) {
-            console.warn("Lỗi kiểm tra phiếu khám theo lịch hẹn:", err);
+        // 3. Nếu mở từ lịch hẹn (appointmentId), kiểm tra xem lịch hẹn đã có phiếu khám chưa
+        if (appointmentId) {
+          try {
+            const existing = await medicalRecordApi.getCheckupByAppointment(appointmentId);
+            if (active && existing) {
+              setCheckupId(existing.id);
+              setCheckupDetail(existing);
+              setStatus(existing.status || "DRAFT");
+              setFormData({
+                checkupType: existing.checkupType || "KHAM_DA_KHOA",
+                isEmergency: Boolean(existing.isEmergency),
+                diseaseGroupId: existing.diseaseGroupId ? Number(existing.diseaseGroupId) : null,
+                symptoms: existing.symptoms || "",
+                treatmentSuggestions: existing.treatmentSuggestions || "",
+                diagnosisNotes: existing.diagnosisNotes || "",
+              });
+              setMedicines(
+                existing.prescribedMedicines && existing.prescribedMedicines.length > 0
+                  ? existing.prescribedMedicines.map((m) => createEmptyMedicine(m))
+                  : []
+              );
+              return;
+            }
+          } catch (err) {
+            // BẮT BUỘC: Xử lý catch lỗi êm nếu backend trả về 404 (chưa tạo phiếu cho lịch hẹn này)
+            // Khởi tạo form trống, tuyệt đối không báo lỗi đỏ cho người dùng.
+            const isNotFound =
+              err?.response?.status === 404 ||
+              err?.status === 404 ||
+              String(err?.message || "").includes("Không tìm thấy");
+
+            if (!isNotFound) {
+              console.warn("Lỗi kiểm tra phiếu khám theo lịch hẹn:", err);
+            }
+          }
+
+          // Tải thông tin lịch hẹn để điền trước thông tin sinh viên & triệu chứng khởi phát
+          try {
+            const appt = await medicalRecordApi.getAppointmentById(appointmentId);
+            if (active && appt) {
+              setAppointmentData(appt);
+              setFormData((prev) => ({
+                ...prev,
+                symptoms: prev.symptoms || appt.reasonSymptoms || "",
+                checkupType:
+                  appt.shiftType === "TU_VAN_TAM_LY"
+                    ? "TU_VAN_TAM_LY"
+                    : "KHAM_DA_KHOA",
+                isEmergency: false,
+              }));
+            }
+          } catch (err) {
+            console.warn("Không thể tải chi tiết lịch hẹn ban đầu:", err);
           }
         }
 
-        // Tải thông tin lịch hẹn để điền trước thông tin sinh viên & triệu chứng khởi phát
-        try {
-          const appt = await medicalRecordApi.getAppointmentById(appointmentId);
-          if (appt) {
-            setAppointmentData(appt);
-            setFormData((prev) => ({
-              ...prev,
-              symptoms: prev.symptoms || appt.reasonSymptoms || "",
-              checkupType:
-                appt.shiftType === "TU_VAN_TAM_LY"
-                  ? "TU_VAN_TAM_LY"
-                  : "KHAM_DA_KHOA",
-              isEmergency: false,
-            }));
+        // 4. Mặc định tạo mới hoàn toàn
+        if (active) {
+          setStatus("DRAFT");
+          if (isEmergencyParam) {
+            setFormData((prev) => ({ ...prev, isEmergency: true }));
           }
-        } catch (err) {
-          console.warn("Không thể tải chi tiết lịch hẹn ban đầu:", err);
+        }
+      } catch (err) {
+        if (!active) return;
+        console.error("Lỗi nạp dữ liệu phiếu khám:", err);
+        setError(
+          err?.response?.data?.message ||
+            err?.message ||
+            "Không thể tải thông tin phiếu khám."
+        );
+      } finally {
+        if (active) {
+          setLoading(false);
         }
       }
-
-      // 4. Mặc định tạo mới hoàn toàn
-      setStatus("DRAFT");
-      if (isEmergencyParam) {
-        setFormData((prev) => ({ ...prev, isEmergency: true }));
-      }
-    } catch (err) {
-      console.error("Lỗi nạp dữ liệu phiếu khám:", err);
-      setError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Không thể tải thông tin phiếu khám."
-      );
-    } finally {
-      setLoading(false);
     }
-  }, [pathId, appointmentId, isEmergencyParam]);
 
-  useEffect(() => {
-    loadInitialData();
-  }, [loadInitialData]);
+    initializeCheckup();
+
+    return () => {
+      active = false;
+    };
+  }, [pathId, appointmentId, isEmergencyParam]);
 
   // Xác định studentId và thông tin sinh viên dự phòng
   const effectiveStudentId =

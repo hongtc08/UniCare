@@ -1,13 +1,10 @@
 import { useState, useEffect } from "react";
 import {
-  User,
   AlertTriangle,
   Heart,
   ShieldCheck,
-  Calendar,
   Clock,
   Activity,
-  FileText,
   AlertCircle,
   Phone,
   Mail,
@@ -25,20 +22,16 @@ import { medicalRecordApi } from "../../api/medicalRecordApi";
  */
 export default function PatientOverviewWrapper({ studentId, fallbackData = {} }) {
   const [overview, setOverview] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(() => Boolean(studentId));
 
   useEffect(() => {
     let active = true;
 
     if (!studentId) {
-      setOverview(null);
-      setLoading(false);
-      return;
+      return () => {
+        active = false;
+      };
     }
-
-    setLoading(true);
-    setError(null);
 
     medicalRecordApi
       .getStudentMedicalOverview(studentId)
@@ -48,9 +41,7 @@ export default function PatientOverviewWrapper({ studentId, fallbackData = {} })
       })
       .catch((err) => {
         if (!active) return;
-        // Bắt lỗi nhẹ nhàng (403, 404 hoặc mạng) và hiển thị fallbackData
         console.warn("Không thể tải hồ sơ tổng hợp sinh viên:", err);
-        setError("Chưa thể đồng bộ hồ sơ y tế đầy đủ. Hiển thị thông tin cơ bản.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -138,6 +129,12 @@ export default function PatientOverviewWrapper({ studentId, fallbackData = {} })
             <span className="truncate">{displayPhone}</span>
           </div>
         </div>
+        {displayEmail && (
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 truncate">
+            <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="truncate" title={displayEmail}>{displayEmail}</span>
+          </div>
+        )}
       </div>
 
       {loading ? (
