@@ -1,13 +1,18 @@
 package com.unicare.application.service;
 
 import com.unicare.application.dto.request.CreateMedicalCheckupRequest;
+import com.unicare.application.dto.request.CreateTransferRecordRequest;
 import com.unicare.application.dto.request.PrescribedMedicineRequest;
+import com.unicare.application.dto.request.UpdateEmergencyProgressRequest;
 import com.unicare.application.dto.request.UpdateMedicalCheckupRequest;
 import com.unicare.application.dto.request.UpdatePrescriptionRequest;
+import com.unicare.application.dto.response.EmergencyCasePageResponse;
+import com.unicare.application.dto.response.EmergencyStatsResponse;
 import com.unicare.application.dto.response.MedicalCheckupDetailResponse;
 import com.unicare.application.dto.response.PrescribedMedicineResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.dto.response.TransferRecordResponse;
+import com.unicare.application.dto.response.TransferReferralPrintResponse;
 import com.unicare.application.service.impl.MedicalCheckupServiceImpl;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.DuplicateResourceException;
@@ -19,9 +24,12 @@ import com.unicare.domain.enums.ShiftStatus;
 import com.unicare.domain.enums.UserStatus;
 import com.unicare.domain.repository.AppointmentRepository;
 import com.unicare.domain.repository.DiseaseGroupRepository;
+import com.unicare.domain.repository.HealthInsuranceRepository;
+import com.unicare.domain.repository.HealthRecordRepository;
 import com.unicare.domain.repository.MedicalCheckupRepository;
 import com.unicare.domain.repository.MedicalStaffRepository;
 import com.unicare.domain.repository.StudentRepository;
+import com.unicare.domain.repository.TransferRecordRepository;
 import com.unicare.domain.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +39,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -65,6 +74,15 @@ class MedicalCheckupServiceImplTest {
     @Mock
     private DiseaseGroupRepository diseaseGroupRepository;
 
+    @Mock
+    private TransferRecordRepository transferRecordRepository;
+
+    @Mock
+    private HealthRecordRepository healthRecordRepository;
+
+    @Mock
+    private HealthInsuranceRepository healthInsuranceRepository;
+
     private MedicalCheckupServiceImpl medicalCheckupService;
 
     private User studentUser;
@@ -94,7 +112,10 @@ class MedicalCheckupServiceImplTest {
                 appointmentRepository,
                 studentRepository,
                 medicalStaffRepository,
-                diseaseGroupRepository
+                diseaseGroupRepository,
+                transferRecordRepository,
+                healthRecordRepository,
+                healthInsuranceRepository
         );
 
         Faculty faculty = Faculty.builder()
@@ -1102,5 +1123,413 @@ class MedicalCheckupServiceImplTest {
         assertThatThrownBy(() -> medicalCheckupService.getStudentMedicalHistory(null, null))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("Yêu cầu đăng nhập");
+    }
+
+    @Test
+    @DisplayName("Lập Hồ sơ Chuyển viện (POST /api/medical-records/{id}/transfer): Thành công, tự động kết thúc ca khám và khóa Read-only")
+    void createTransferRecord_Success_And_AutoCompleteAndLock() {
+        draftCheckup.setIsEmergency(true);
+        draftCheckup.setSymptoms(null);
+        draftCheckup.setDiagnosisNotes(null);
+        draftCheckup.setTreatmentSuggestions(null);
+        draftCheckup.setAppointment(confirmedAppointment);
+
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(medicalCheckupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(draftCheckup));
+        when(transferRecordRepository.existsByMedicalCheckupId(1L)).thenReturn(false);
+        when(transferRecordRepository.existsByRecordCode(anyString())).thenReturn(false);
+        when(transferRecordRepository.save(any(TransferRecord.class))).thenAnswer(inv -> {
+            TransferRecord tr = inv.getArgument(0);
+            tr.setId(77L);
+            return tr;
+        });
+        when(medicalCheckupRepository.save(any(MedicalCheckup.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OffsetDateTime transferTime = OffsetDateTime.now();
+        CreateTransferRecordRequest request = new CreateTransferRecordRequest(
+                "Bệnh viện Đa khoa Khu vực Thủ Đức",
+                "CAP_CUU_NANG",
+                "Nghi ngờ viêm ruột thừa cấp cần can thiệp ngoại khoa",
+                "Đau hố chậu phải dữ dội, sốt 38.5 độ C",
+                "Theo dõi sinh hiệu, chườm ấm, đặt đường truyền tĩnh mạch",
+                "Không từ chối",
+                transferTime
+        );
+
+        MedicalCheckupDetailResponse res = medicalCheckupService.createTransferRecord(1L, request, "bs001");
+
+        assertThat(res).isNotNull();
+        assertThat(res.getStatus()).isEqualTo("COMPLETED");
+        assertThat(res.getCompletedAt()).isEqualTo(transferTime);
+        assertThat(res.getCurrentStep()).isEqualTo("CHUYEN_VIEN");
+        assertThat(res.getCurrentStepLabel()).isEqualTo("Chuyển viện ngoài");
+        assertThat(confirmedAppointment.getStatus()).isEqualTo("COMPLETED");
+        assertThat(res.getTransferRecord()).isNotNull();
+        assertThat(res.getTransferRecord().getId()).isEqualTo(77L);
+        assertThat(res.getTransferRecord().getRecordCode()).startsWith("CV");
+        assertThat(res.getTransferRecord().getTargetHospital()).isEqualTo("Bệnh viện Đa khoa Khu vực Thủ Đức");
+        assertThat(res.getTransferRecord().getReasonCategory()).isEqualTo("CAP_CUU_NANG");
+        assertThat(res.getTransferRecord().getRefusalNotes()).isEqualTo("Không từ chối");
+
+        // Kiểm tra khóa Read-only: Gọi lại createTransferRecord hoặc updateCheckup đều bị chặn
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(1L, request, "bs001"))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("đã được xác nhận và khóa chỉ đọc");
+
+        assertThatThrownBy(() -> medicalCheckupService.updateCheckup(1L, new UpdateMedicalCheckupRequest(), "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Read-only");
+    }
+
+    @Test
+    @DisplayName("Lập Hồ sơ Chuyển viện: Kiểm tra đầy đủ các nhánh validate (QUA_TAI, THIEU_THIET_BI, lỗi dữ liệu & phân quyền)")
+    void createTransferRecord_ValidationAndSecurityErrors() {
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+
+        // 1. Request null
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(1L, null, "bs001"))
+                .isInstanceOf(BadRequestException.class);
+
+        // 2. Bệnh viện trống hoặc quá 150 ký tự
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(
+                1L, new CreateTransferRecordRequest("  ", "QUA_TAI", "Lý do", "Tình trạng", "Sơ cứu", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Bệnh viện tuyến trên");
+
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(
+                1L, new CreateTransferRecordRequest("B".repeat(151), "QUA_TAI", "Lý do", "Tình trạng", "Sơ cứu", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("150 ký tự");
+
+        // 3. Phân loại lý do trống hoặc sai
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(
+                1L, new CreateTransferRecordRequest("BV A", "  ", "Lý do", "Tình trạng", "Sơ cứu", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class);
+
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(
+                1L, new CreateTransferRecordRequest("BV A", "SAI_LY_DO", "Lý do", "Tình trạng", "Sơ cứu", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("QUA_TAI, THIEU_THIET_BI hoặc CAP_CUU_NANG");
+
+        // 4. Lý do chi tiết / Tình trạng hiện tại / Biện pháp sơ cứu trống
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(
+                1L, new CreateTransferRecordRequest("BV A", "QUA_TAI", "  ", "Tình trạng", "Sơ cứu", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class);
+
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(
+                1L, new CreateTransferRecordRequest("BV A", "THIEU_THIET_BI", "Lý do", "  ", "Sơ cứu", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class);
+
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(
+                1L, new CreateTransferRecordRequest("BV A", "THIEU_THIET_BI", "Lý do", "Tình trạng", "  ", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class);
+
+        // 5. Phiếu khám đã COMPLETED trước đó (nhưng chưa có transferRecord) -> chặn lập chuyển viện
+        when(medicalCheckupRepository.findByIdWithDetails(2L)).thenReturn(Optional.of(completedCheckup));
+        CreateTransferRecordRequest validReq = new CreateTransferRecordRequest(
+                "BV Chợ Rẫy", "THIEU_THIET_BI", "Thiếu máy chụp CT", "Đau đầu", "Giảm đau", null, null
+        );
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(2L, validReq, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Read-only");
+
+        // 6. Bác sĩ khác không phụ trách phiếu khám -> 403
+        when(userRepository.findByUsername("bs002")).thenReturn(Optional.of(otherDoctorUser));
+        when(medicalCheckupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(draftCheckup));
+        assertThatThrownBy(() -> medicalCheckupService.createTransferRecord(1L, validReq, "bs002"))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("Kết xuất Giấy giới thiệu chuyển viện (GET /api/medical-records/{id}/transfer/print): Đầy đủ dữ liệu bản in & bảo mật")
+    void getTransferReferralPaper_Success_And_SecurityChecks() {
+        student.setDateOfBirth(LocalDate.of(2005, 4, 12));
+        student.setGender("Nam");
+
+        TransferRecord tr = TransferRecord.builder()
+                .id(88L)
+                .recordCode("CV2611180001")
+                .medicalCheckup(completedCheckup)
+                .targetHospital("Bệnh viện Đại học Y Dược TP.HCM")
+                .reasonCategory("THIEU_THIET_BI")
+                .transferReason("Cần chụp cộng hưởng từ chuyên sâu")
+                .currentCondition("Tỉnh táo, sinh hiệu ổn")
+                .firstAidNotes("Đã cố định tạm thời")
+                .refusalNotes(null)
+                .transferredAt(OffsetDateTime.now())
+                .build();
+        completedCheckup.setTransferRecord(tr);
+        completedCheckup.setDiseaseGroup(fluDiseaseGroup);
+        completedCheckup.addPrescribedMedicine(PrescribedMedicine.builder()
+                .id(1L).medicineName("Paracetamol").quantity(2).dosageInstruction("Uống 1 viên").build());
+
+        HealthRecord hr = new HealthRecord();
+        hr.setHeight(BigDecimal.valueOf(172.0));
+        hr.setWeight(BigDecimal.valueOf(64.0));
+        hr.setBloodType("A");
+        hr.setBmi(BigDecimal.valueOf(21.6));
+        hr.setAllergies("Không dị ứng");
+        hr.setUnderlyingDiseases("Không có");
+
+        HealthInsurance hi = HealthInsurance.builder()
+                .cardNumber("SV4792452000100")
+                .initialHospital("BV Thủ Đức")
+                .effectiveDate(LocalDate.of(2026, 1, 1))
+                .expirationDate(LocalDate.of(2026, 12, 31))
+                .build();
+
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(medicalCheckupRepository.findByIdWithDetails(2L)).thenReturn(Optional.of(completedCheckup));
+        when(healthRecordRepository.findByStudentId(10L)).thenReturn(Optional.of(hr));
+        when(healthInsuranceRepository.findByStudentIdWithDetails(10L)).thenReturn(Optional.of(hi));
+
+        TransferReferralPrintResponse printData = medicalCheckupService.getTransferReferralPaper(2L, "bs001");
+
+        assertThat(printData).isNotNull();
+        assertThat(printData.getReferringUnitName()).isEqualTo(TransferReferralPrintResponse.REFERRING_UNIT_NAME);
+        assertThat(printData.isReadOnly()).isTrue();
+        assertThat(printData.getTransferId()).isEqualTo(88L);
+        assertThat(printData.getRecordCode()).isEqualTo("CV2611180001");
+        assertThat(printData.getTargetHospital()).isEqualTo("Bệnh viện Đại học Y Dược TP.HCM");
+        assertThat(printData.getReasonCategory()).isEqualTo("THIEU_THIET_BI");
+        assertThat(printData.getReasonCategoryLabel()).isEqualTo("Thiếu thiết bị / thuốc chuyên khoa");
+        assertThat(printData.getStudentName()).isEqualTo("Nguyễn Văn Sinh Viên");
+        assertThat(printData.getClassCode()).isEqualTo("SE104.O11");
+        assertThat(printData.getFacultyName()).isEqualTo("Công nghệ Phần mềm");
+        assertThat(printData.getInsuranceCardNumber()).isEqualTo("SV4792452000100");
+        assertThat(printData.getHeight()).isEqualTo(172.0);
+        assertThat(printData.getBmi()).isEqualTo(21.6);
+        assertThat(printData.getDoctorName()).isEqualTo("Bác sĩ Nguyễn Văn A");
+        assertThat(printData.getPrescribedMedicines()).hasSize(2);
+
+        // Chính sinh viên của ca khám cũng có thể xem giấy giới thiệu chuyển viện của mình
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+        TransferReferralPrintResponse studentPrint = medicalCheckupService.getTransferReferralPaper(2L, "sv001");
+        assertThat(studentPrint.getRecordCode()).isEqualTo("CV2611180001");
+
+        // Chặn sinh viên khác (IDOR) -> 403
+        when(userRepository.findByUsername("sv002")).thenReturn(Optional.of(otherStudentUser));
+        assertThatThrownBy(() -> medicalCheckupService.getTransferReferralPaper(2L, "sv002"))
+                .isInstanceOf(AccessDeniedException.class);
+
+        // Chặn Ban quản lý (BAN_QUAN_LY) -> 403
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(adminUser));
+        assertThatThrownBy(() -> medicalCheckupService.getTransferReferralPaper(2L, "admin"))
+                .isInstanceOf(AccessDeniedException.class);
+
+        // Phiếu khám chưa có hồ sơ chuyển viện -> 404
+        when(medicalCheckupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(draftCheckup));
+        when(transferRecordRepository.findByMedicalCheckupId(1L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> medicalCheckupService.getTransferReferralPaper(1L, "bs001"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("chưa có hồ sơ chuyển viện");
+    }
+
+    @Test
+    @DisplayName("Tiếp nhận khẩn cấp: Tạo phiếu, lấy danh sách lọc/phân trang, cập nhật tiến độ 4 bước và thống kê")
+    void emergencyIntake_FullLifecycle_List_Progress_And_Stats() {
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(studentRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(student));
+        when(medicalCheckupRepository.existsByCheckupCode(anyString())).thenReturn(false);
+        when(medicalCheckupRepository.save(any(MedicalCheckup.class))).thenAnswer(inv -> {
+            MedicalCheckup mc = inv.getArgument(0);
+            if (mc.getId() == null) {
+                mc.setId(500L);
+            }
+            return mc;
+        });
+
+        // 1. Tạo phiếu tiếp nhận khẩn cấp
+        CreateMedicalCheckupRequest intakeReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L)
+                .isEmergency(true)
+                .emergencyLevel("KHAN_CAP")
+                .emergencyType("Chấn thương thể thao")
+                .reporterContact("Nguyễn Văn Bạn - 0909111222")
+                .symptoms("Trật khớp cổ chân phải khi đá bóng")
+                .build();
+
+        MedicalCheckupDetailResponse created = medicalCheckupService.createCheckup(intakeReq, "bs001");
+        assertThat(created.getId()).isEqualTo(500L);
+        assertThat(created.getIsEmergency()).isTrue();
+        assertThat(created.getEmergencyLevel()).isEqualTo("KHAN_CAP");
+        assertThat(created.getEmergencyType()).isEqualTo("Chấn thương thể thao");
+        assertThat(created.getReporterContact()).isEqualTo("Nguyễn Văn Bạn - 0909111222");
+        assertThat(created.getCurrentStep()).isEqualTo("TIEP_NHAN");
+        assertThat(created.getCurrentStepLabel()).isEqualTo("Đã tiếp nhận");
+
+        // 2. Cập nhật tiến độ ca cấp cứu sang SO_CUU -> KET_THUC
+        MedicalCheckup emergencyEntity = MedicalCheckup.builder()
+                .id(500L)
+                .checkupCode(created.getCheckupCode())
+                .student(student)
+                .staff(doctorStaff)
+                .checkupType("GENERAL")
+                .isEmergency(true)
+                .emergencyLevel("KHAN_CAP")
+                .emergencyType("Chấn thương thể thao")
+                .reporterContact("Nguyễn Văn Bạn - 0909111222")
+                .currentStep("TIEP_NHAN")
+                .symptoms("Trật khớp cổ chân phải")
+                .status("DRAFT")
+                .createdAt(OffsetDateTime.now())
+                .build();
+
+        when(medicalCheckupRepository.findByIdWithDetails(500L)).thenReturn(Optional.of(emergencyEntity));
+
+        UpdateEmergencyProgressRequest firstAidProgress = new UpdateEmergencyProgressRequest(
+                "SO_CUU", "Chườm đá lạnh, băng thun cố định cổ chân", "Chấn thương phần mềm cổ chân"
+        );
+        MedicalCheckupDetailResponse afterFirstAid = medicalCheckupService.updateEmergencyProgress(500L, firstAidProgress, "bs001");
+        assertThat(afterFirstAid.getCurrentStep()).isEqualTo("SO_CUU");
+        assertThat(afterFirstAid.getCurrentStepLabel()).isEqualTo("Sơ cứu ban đầu");
+        assertThat(afterFirstAid.getStatus()).isEqualTo("DRAFT");
+        assertThat(afterFirstAid.getTreatmentSuggestions()).isEqualTo("Chườm đá lạnh, băng thun cố định cổ chân");
+
+        // 3. Danh sách ca cấp cứu (lọc & phân trang) và Thống kê trước khi kết thúc
+        MedicalCheckup transferredEmergency = MedicalCheckup.builder()
+                .id(501L)
+                .checkupCode("PK2611180501")
+                .student(otherStudent)
+                .staff(doctorStaff)
+                .checkupType("GENERAL")
+                .isEmergency(true)
+                .emergencyLevel("CAP_CUU")
+                .emergencyType("Ngất xỉu")
+                .currentStep("CHUYEN_VIEN")
+                .status("COMPLETED")
+                .createdAt(OffsetDateTime.now())
+                .completedAt(OffsetDateTime.now())
+                .build();
+
+        when(medicalCheckupRepository.findEmergencyCasesWithDetails())
+                .thenReturn(List.of(emergencyEntity, transferredEmergency));
+
+        EmergencyCasePageResponse pageRes = medicalCheckupService.getEmergencyCases(
+                "24521234", "KHAN_CAP", "Chấn thương thể thao", "SO_CUU", "DRAFT", LocalDate.now(), 0, 10, "bs001"
+        );
+        assertThat(pageRes.getTotalElements()).isEqualTo(1L);
+        assertThat(pageRes.getItems()).hasSize(1);
+        assertThat(pageRes.getContent()).hasSize(1);
+        assertThat(pageRes.getCases()).hasSize(1);
+        assertThat(pageRes.getItems().get(0).getCheckupCode()).isEqualTo(created.getCheckupCode());
+
+        EmergencyStatsResponse stats = medicalCheckupService.getEmergencyStats("bs001");
+        assertThat(stats.getInProgressCount()).isEqualTo(1L);
+        assertThat(stats.getProcessingCount()).isEqualTo(1L);
+        assertThat(stats.getFirstAidCount()).isEqualTo(1L);
+        assertThat(stats.getTransferringCount()).isEqualTo(1L);
+        assertThat(stats.getCompletedTodayCount()).isEqualTo(1L);
+
+        // 4. Chuyển bước sang KET_THUC -> tự động hoàn tất ca khám
+        UpdateEmergencyProgressRequest finishProgress = new UpdateEmergencyProgressRequest("KET_THUC", null, null);
+        MedicalCheckupDetailResponse finished = medicalCheckupService.updateEmergencyProgress(500L, finishProgress, "bs001");
+        assertThat(finished.getCurrentStep()).isEqualTo("KET_THUC");
+        assertThat(finished.getCurrentStepLabel()).isEqualTo("Kết thúc ca");
+        assertThat(finished.getStatus()).isEqualTo("COMPLETED");
+        assertThat(finished.getCompletedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Kiểm tra các nhánh biên của DTO và validate lỗi trong Tiếp nhận khẩn cấp")
+    void emergencyIntake_ValidationAndDtoEdgeCases() {
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+
+        // 1. updateEmergencyProgress với request rỗng hoặc bước không hợp lệ hoặc không phải ca cấp cứu
+        assertThatThrownBy(() -> medicalCheckupService.updateEmergencyProgress(1L, null, "bs001"))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> medicalCheckupService.updateEmergencyProgress(1L, new UpdateEmergencyProgressRequest("  ", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class);
+
+        draftCheckup.setIsEmergency(false);
+        when(medicalCheckupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(draftCheckup));
+        assertThatThrownBy(() -> medicalCheckupService.updateEmergencyProgress(
+                1L, new UpdateEmergencyProgressRequest("SO_CUU", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("ca tiếp nhận khẩn cấp");
+
+        draftCheckup.setIsEmergency(true);
+        assertThatThrownBy(() -> medicalCheckupService.updateEmergencyProgress(
+                1L, new UpdateEmergencyProgressRequest("BUOC_SAI", null, null), "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("TIEP_NHAN, SO_CUU, CHUYEN_VIEN hoặc KET_THUC");
+
+        // 2. Độ dài vượt quá giới hạn khi tạo phiếu khẩn cấp
+        when(studentRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(student));
+        CreateMedicalCheckupRequest longLevelReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L).isEmergency(true).emergencyLevel("L".repeat(25)).build();
+        assertThatThrownBy(() -> medicalCheckupService.createCheckup(longLevelReq, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("20 ký tự");
+
+        CreateMedicalCheckupRequest longTypeReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L).isEmergency(true).emergencyType("T".repeat(55)).build();
+        assertThatThrownBy(() -> medicalCheckupService.createCheckup(longTypeReq, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("50 ký tự");
+
+        CreateMedicalCheckupRequest longContactReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L).isEmergency(true).reporterContact("C".repeat(155)).build();
+        assertThatThrownBy(() -> medicalCheckupService.createCheckup(longContactReq, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("150 ký tự");
+
+        // 3. DTO coverage cho EmergencyCasePageResponse, EmergencyStatsResponse, TransferReferralPrintResponse
+        EmergencyCasePageResponse emptyPage = new EmergencyCasePageResponse();
+        emptyPage.setItems(null);
+        emptyPage.setPage(0);
+        emptyPage.setSize(10);
+        emptyPage.setTotalElements(0L);
+        emptyPage.setTotalPages(0);
+        emptyPage.setHasNext(false);
+        emptyPage.setHasPrevious(false);
+        assertThat(emptyPage.getItems()).isEmpty();
+        assertThat(emptyPage.getPage()).isZero();
+        assertThat(emptyPage.getSize()).isEqualTo(10);
+        assertThat(emptyPage.getTotalElements()).isZero();
+        assertThat(emptyPage.getTotalPages()).isZero();
+        assertThat(emptyPage.isHasNext()).isFalse();
+        assertThat(emptyPage.isHasPrevious()).isFalse();
+
+        EmergencyStatsResponse statsDto = new EmergencyStatsResponse();
+        statsDto.setInProgressCount(2L);
+        statsDto.setFirstAidCount(1L);
+        statsDto.setTransferringCount(1L);
+        statsDto.setCompletedTodayCount(3L);
+        assertThat(statsDto.getInProgressCount()).isEqualTo(2L);
+        assertThat(statsDto.getFirstAidCount()).isEqualTo(1L);
+        assertThat(statsDto.getTransferringCount()).isEqualTo(1L);
+        assertThat(statsDto.getCompletedTodayCount()).isEqualTo(3L);
+
+        assertThat(TransferReferralPrintResponse.fromEntities(null, null, null, null)).isNull();
+        assertThat(TransferReferralPrintResponse.resolveReasonCategoryLabel(null)).isNull();
+        assertThat(TransferReferralPrintResponse.resolveReasonCategoryLabel("QUA_TAI")).isEqualTo("Quá tải");
+        assertThat(TransferReferralPrintResponse.resolveReasonCategoryLabel("CAP_CUU_NANG")).contains("Cấp cứu nặng");
+        assertThat(TransferReferralPrintResponse.resolveReasonCategoryLabel("OTHER")).isEqualTo("OTHER");
+
+        CreateTransferRecordRequest transferReqDto = new CreateTransferRecordRequest();
+        OffsetDateTime now = OffsetDateTime.now();
+        transferReqDto.setTargetHospital("BV 1");
+        transferReqDto.setReasonCategory("QUA_TAI");
+        transferReqDto.setTransferReason("Lý do");
+        transferReqDto.setCurrentCondition("Tình trạng");
+        transferReqDto.setFirstAidNotes("Sơ cứu");
+        transferReqDto.setRefusalNotes("Ghi chú");
+        transferReqDto.setTransferredAt(now);
+        assertThat(transferReqDto.getTargetHospital()).isEqualTo("BV 1");
+        assertThat(transferReqDto.getReasonCategory()).isEqualTo("QUA_TAI");
+        assertThat(transferReqDto.getTransferReason()).isEqualTo("Lý do");
+        assertThat(transferReqDto.getCurrentCondition()).isEqualTo("Tình trạng");
+        assertThat(transferReqDto.getFirstAidNotes()).isEqualTo("Sơ cứu");
+        assertThat(transferReqDto.getRefusalNotes()).isEqualTo("Ghi chú");
+        assertThat(transferReqDto.getTransferredAt()).isEqualTo(now);
+
+        UpdateEmergencyProgressRequest progressReqDto = new UpdateEmergencyProgressRequest();
+        progressReqDto.setCurrentStep("SO_CUU");
+        progressReqDto.setTreatmentSuggestions("Sơ cứu");
+        progressReqDto.setDiagnosisNotes("Chẩn đoán");
+        assertThat(progressReqDto.getCurrentStep()).isEqualTo("SO_CUU");
+        assertThat(progressReqDto.getTreatmentSuggestions()).isEqualTo("Sơ cứu");
+        assertThat(progressReqDto.getDiagnosisNotes()).isEqualTo("Chẩn đoán");
     }
 }

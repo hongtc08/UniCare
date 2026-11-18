@@ -15,7 +15,12 @@ import java.time.OffsetDateTime;
 
 public class ShiftResponse {
 
+    public static final Long DEFAULT_FACILITY_ID = 1L;
+    public static final String DEFAULT_FACILITY_NAME = "Trung tâm Y tế Cơ sở Chính";
+
     private Long id;
+    private Long facilityId = DEFAULT_FACILITY_ID;
+    private String facilityName = DEFAULT_FACILITY_NAME;
     private Long doctorId;
     private Long staffId;
     private String doctorUsername;
@@ -45,6 +50,8 @@ public class ShiftResponse {
         }
         ShiftResponse response = new ShiftResponse();
         response.setId(shift.getId());
+        response.setFacilityId(DEFAULT_FACILITY_ID);
+        response.setFacilityName(DEFAULT_FACILITY_NAME);
 
         MedicalStaff staff = shift.getStaff();
         if (staff != null) {
@@ -85,6 +92,22 @@ public class ShiftResponse {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getFacilityId() {
+        return facilityId;
+    }
+
+    public void setFacilityId(Long facilityId) {
+        this.facilityId = facilityId;
+    }
+
+    public String getFacilityName() {
+        return facilityName;
+    }
+
+    public void setFacilityName(String facilityName) {
+        this.facilityName = facilityName;
     }
 
     public Long getDoctorId() {

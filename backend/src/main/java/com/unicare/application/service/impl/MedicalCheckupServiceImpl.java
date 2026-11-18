@@ -1,29 +1,40 @@
 package com.unicare.application.service.impl;
 
 import com.unicare.application.dto.request.CreateMedicalCheckupRequest;
+import com.unicare.application.dto.request.CreateTransferRecordRequest;
 import com.unicare.application.dto.request.PrescribedMedicineRequest;
+import com.unicare.application.dto.request.UpdateEmergencyProgressRequest;
 import com.unicare.application.dto.request.UpdateMedicalCheckupRequest;
 import com.unicare.application.dto.request.UpdatePrescriptionRequest;
+import com.unicare.application.dto.response.EmergencyCasePageResponse;
+import com.unicare.application.dto.response.EmergencyStatsResponse;
 import com.unicare.application.dto.response.MedicalCheckupDetailResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
+import com.unicare.application.dto.response.TransferReferralPrintResponse;
 import com.unicare.application.service.MedicalCheckupService;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.DuplicateResourceException;
 import com.unicare.common.exception.ResourceNotFoundException;
 import com.unicare.domain.entity.Appointment;
 import com.unicare.domain.entity.DiseaseGroup;
+import com.unicare.domain.entity.HealthInsurance;
+import com.unicare.domain.entity.HealthRecord;
 import com.unicare.domain.entity.MedicalCheckup;
 import com.unicare.domain.entity.MedicalStaff;
 import com.unicare.domain.entity.PrescribedMedicine;
 import com.unicare.domain.entity.Student;
+import com.unicare.domain.entity.TransferRecord;
 import com.unicare.domain.entity.User;
 import com.unicare.domain.enums.Role;
 import com.unicare.domain.enums.ServiceType;
 import com.unicare.domain.repository.AppointmentRepository;
 import com.unicare.domain.repository.DiseaseGroupRepository;
+import com.unicare.domain.repository.HealthInsuranceRepository;
+import com.unicare.domain.repository.HealthRecordRepository;
 import com.unicare.domain.repository.MedicalCheckupRepository;
 import com.unicare.domain.repository.MedicalStaffRepository;
 import com.unicare.domain.repository.StudentRepository;
+import com.unicare.domain.repository.TransferRecordRepository;
 import com.unicare.domain.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
@@ -33,11 +44,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
@@ -55,6 +68,16 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
     public static final String PERIODIC_RESULT_PASSED = "PASSED";
     public static final String PERIODIC_RESULT_FAILED = "FAILED";
 
+    public static final String STEP_TIEP_NHAN = "TIEP_NHAN";
+    public static final String STEP_SO_CUU = "SO_CUU";
+    public static final String STEP_CHUYEN_VIEN = "CHUYEN_VIEN";
+    public static final String STEP_KET_THUC = "KET_THUC";
+
+    public static final String REASON_QUA_TAI = "QUA_TAI";
+    public static final String REASON_THIEU_THIET_BI = "THIEU_THIET_BI";
+    public static final String REASON_CAP_CUU_NANG = "CAP_CUU_NANG";
+
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter CODE_DATE_FORMAT = DateTimeFormatter.ofPattern("yyMMdd");
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Comparator<MedicalCheckup> TIMELINE_COMPARATOR = Comparator
@@ -70,11 +93,34 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
     private final StudentRepository studentRepository;
     private final MedicalStaffRepository medicalStaffRepository;
     private final DiseaseGroupRepository diseaseGroupRepository;
+    private final TransferRecordRepository transferRecordRepository;
+    private final HealthRecordRepository healthRecordRepository;
+    private final HealthInsuranceRepository healthInsuranceRepository;
 
     public MedicalCheckupServiceImpl(
             MedicalCheckupRepository medicalCheckupRepository,
             UserRepository userRepository) {
-        this(medicalCheckupRepository, userRepository, null, null, null, null);
+        this(medicalCheckupRepository, userRepository, null, null, null, null, null, null, null);
+    }
+
+    public MedicalCheckupServiceImpl(
+            MedicalCheckupRepository medicalCheckupRepository,
+            UserRepository userRepository,
+            AppointmentRepository appointmentRepository,
+            StudentRepository studentRepository,
+            MedicalStaffRepository medicalStaffRepository,
+            DiseaseGroupRepository diseaseGroupRepository) {
+        this(
+                medicalCheckupRepository,
+                userRepository,
+                appointmentRepository,
+                studentRepository,
+                medicalStaffRepository,
+                diseaseGroupRepository,
+                null,
+                null,
+                null
+        );
     }
 
     @Autowired
@@ -84,13 +130,19 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
             AppointmentRepository appointmentRepository,
             StudentRepository studentRepository,
             MedicalStaffRepository medicalStaffRepository,
-            DiseaseGroupRepository diseaseGroupRepository) {
+            DiseaseGroupRepository diseaseGroupRepository,
+            TransferRecordRepository transferRecordRepository,
+            HealthRecordRepository healthRecordRepository,
+            HealthInsuranceRepository healthInsuranceRepository) {
         this.medicalCheckupRepository = medicalCheckupRepository;
         this.userRepository = userRepository;
         this.appointmentRepository = appointmentRepository;
         this.studentRepository = studentRepository;
         this.medicalStaffRepository = medicalStaffRepository;
         this.diseaseGroupRepository = diseaseGroupRepository;
+        this.transferRecordRepository = transferRecordRepository;
+        this.healthRecordRepository = healthRecordRepository;
+        this.healthInsuranceRepository = healthInsuranceRepository;
     }
 
     @Override
@@ -204,6 +256,15 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
         String periodicResult = normalizePeriodicResult(request.getPeriodicResult());
         String targetStatus = normalizeStatus(request.getStatus());
 
+        String emergencyLevel = isEmergency ? normalizeEmergencyLevel(request.getEmergencyLevel()) : null;
+        String emergencyType = isEmergency ? normalizeEmergencyType(request.getEmergencyType()) : null;
+        String reporterContact = isEmergency ? normalizeReporterContact(request.getReporterContact()) : null;
+        String currentStep = isEmergency
+                ? (request.getCurrentStep() != null && !request.getCurrentStep().isBlank()
+                        ? normalizeEmergencyStep(request.getCurrentStep())
+                        : STEP_TIEP_NHAN)
+                : null;
+
         MedicalCheckup checkup = MedicalCheckup.builder()
                 .checkupCode(generateUniqueCheckupCode())
                 .student(student)
@@ -211,6 +272,10 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
                 .appointment(appointment)
                 .checkupType(checkupType)
                 .isEmergency(isEmergency)
+                .emergencyLevel(emergencyLevel)
+                .emergencyType(emergencyType)
+                .reporterContact(reporterContact)
+                .currentStep(currentStep)
                 .periodicResult(periodicResult)
                 .symptoms(initialSymptoms)
                 .diagnosisNotes(trimToNull(request.getDiagnosisNotes()))
@@ -220,7 +285,10 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
                 .createdAt(OffsetDateTime.now())
                 .build();
 
-        if (STATUS_COMPLETED.equals(targetStatus)) {
+        if (STATUS_COMPLETED.equals(targetStatus) || STEP_KET_THUC.equals(currentStep)) {
+            if (isEmergency) {
+                checkup.setCurrentStep(STEP_KET_THUC);
+            }
             applyCompletion(checkup);
         }
 
@@ -252,6 +320,23 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
             checkup.setIsEmergency(request.getIsEmergency());
         }
 
+        if (Boolean.TRUE.equals(checkup.getIsEmergency())) {
+            if (request.getEmergencyLevel() != null) {
+                checkup.setEmergencyLevel(normalizeEmergencyLevel(request.getEmergencyLevel()));
+            }
+            if (request.getEmergencyType() != null) {
+                checkup.setEmergencyType(normalizeEmergencyType(request.getEmergencyType()));
+            }
+            if (request.getReporterContact() != null) {
+                checkup.setReporterContact(normalizeReporterContact(request.getReporterContact()));
+            }
+            if (request.getCurrentStep() != null && !request.getCurrentStep().isBlank()) {
+                checkup.setCurrentStep(normalizeEmergencyStep(request.getCurrentStep()));
+            } else if (checkup.getCurrentStep() == null) {
+                checkup.setCurrentStep(STEP_TIEP_NHAN);
+            }
+        }
+
         checkup.setSymptoms(trimToNull(request.getSymptoms()));
         checkup.setDiagnosisNotes(trimToNull(request.getDiagnosisNotes()));
         checkup.setTreatmentSuggestions(trimToNull(request.getTreatmentSuggestions()));
@@ -262,7 +347,10 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
         }
 
         String targetStatus = normalizeStatus(request.getStatus());
-        if (STATUS_COMPLETED.equals(targetStatus)) {
+        if (STATUS_COMPLETED.equals(targetStatus) || STEP_KET_THUC.equals(checkup.getCurrentStep())) {
+            if (Boolean.TRUE.equals(checkup.getIsEmergency()) && !STEP_CHUYEN_VIEN.equals(checkup.getCurrentStep())) {
+                checkup.setCurrentStep(STEP_KET_THUC);
+            }
             applyCompletion(checkup);
         } else {
             checkup.setStatus(STATUS_DRAFT);
@@ -284,6 +372,9 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
         validateAssignedDoctor(checkup, currentUser, "hoàn tất phiếu khám này");
         validateCheckupEditable(checkup, "hoàn tất lại hoặc chỉnh sửa");
 
+        if (Boolean.TRUE.equals(checkup.getIsEmergency()) && !STEP_CHUYEN_VIEN.equals(checkup.getCurrentStep())) {
+            checkup.setCurrentStep(STEP_KET_THUC);
+        }
         applyCompletion(checkup);
 
         MedicalCheckup savedCheckup = medicalCheckupRepository.save(checkup);
@@ -441,6 +532,276 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
                 .toList();
     }
 
+    @Override
+    @Transactional
+    public MedicalCheckupDetailResponse createTransferRecord(
+            Long checkupId,
+            CreateTransferRecordRequest request,
+            String currentUsername
+    ) {
+        if (request == null) {
+            throw new BadRequestException("Dữ liệu lập hồ sơ chuyển viện không được để trống");
+        }
+
+        String cleanHospital = trimToNull(request.getTargetHospital());
+        if (cleanHospital == null) {
+            throw new BadRequestException("Bệnh viện tuyến trên tiếp nhận không được để trống");
+        }
+        if (cleanHospital.length() > 150) {
+            throw new BadRequestException("Tên bệnh viện tuyến trên không được vượt quá 150 ký tự");
+        }
+
+        String normalizedCategory = normalizeTransferReasonCategory(request.getReasonCategory());
+
+        String cleanTransferReason = trimToNull(request.getTransferReason());
+        if (cleanTransferReason == null) {
+            throw new BadRequestException("Lý do chuyển viện chi tiết không được để trống");
+        }
+
+        String cleanCondition = trimToNull(request.getCurrentCondition());
+        if (cleanCondition == null) {
+            throw new BadRequestException("Tình trạng hiện tại của sinh viên không được để trống");
+        }
+
+        String cleanFirstAid = trimToNull(request.getFirstAidNotes());
+        if (cleanFirstAid == null) {
+            throw new BadRequestException("Biện pháp sơ cứu đã thực hiện không được để trống");
+        }
+
+        String cleanRefusal = trimToNull(request.getRefusalNotes());
+        OffsetDateTime transferredAt = request.getTransferredAt() != null
+                ? request.getTransferredAt()
+                : OffsetDateTime.now();
+
+        User currentUser = resolveCurrentUser(currentUsername);
+        validateDoctorRole(currentUser, "lập hồ sơ chuyển viện");
+
+        MedicalCheckup checkup = medicalCheckupRepository.findByIdWithDetails(checkupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phiếu khám với ID: " + checkupId));
+
+        validateAssignedDoctor(checkup, currentUser, "lập hồ sơ chuyển viện cho phiếu khám này");
+
+        boolean alreadyHasTransfer = checkup.getTransferRecord() != null
+                || (transferRecordRepository != null && transferRecordRepository.existsByMedicalCheckupId(checkupId));
+        if (alreadyHasTransfer) {
+            throw new DuplicateResourceException(
+                    "Hồ sơ chuyển viện đã được xác nhận và khóa chỉ đọc, không thể lập lại hoặc chỉnh sửa");
+        }
+
+        validateCheckupEditable(checkup, "lập hồ sơ chuyển viện");
+
+        if (checkup.getSymptoms() == null || checkup.getSymptoms().isBlank()) {
+            checkup.setSymptoms(cleanCondition);
+        }
+        if (checkup.getDiagnosisNotes() == null || checkup.getDiagnosisNotes().isBlank()) {
+            checkup.setDiagnosisNotes(cleanTransferReason);
+        }
+        if (checkup.getTreatmentSuggestions() == null || checkup.getTreatmentSuggestions().isBlank()) {
+            checkup.setTreatmentSuggestions(cleanFirstAid);
+        }
+
+        TransferRecord transferRecord = TransferRecord.builder()
+                .recordCode(generateUniqueTransferRecordCode())
+                .medicalCheckup(checkup)
+                .targetHospital(cleanHospital)
+                .reasonCategory(normalizedCategory)
+                .transferReason(cleanTransferReason)
+                .currentCondition(cleanCondition)
+                .firstAidNotes(cleanFirstAid)
+                .refusalNotes(cleanRefusal)
+                .transferredAt(transferredAt)
+                .build();
+
+        if (transferRecordRepository != null) {
+            transferRecord = transferRecordRepository.save(transferRecord);
+        }
+        checkup.setTransferRecord(transferRecord);
+
+        if (Boolean.TRUE.equals(checkup.getIsEmergency())) {
+            checkup.setCurrentStep(STEP_CHUYEN_VIEN);
+        }
+
+        // Tự động kết thúc ca khám tại trường và khóa Read-only hồ sơ
+        checkup.markCompleted(transferredAt);
+        Appointment appointment = checkup.getAppointment();
+        if (appointment != null) {
+            appointment.setStatus(APPOINTMENT_STATUS_COMPLETED);
+            if (appointmentRepository != null) {
+                appointmentRepository.save(appointment);
+            }
+        }
+
+        MedicalCheckup savedCheckup = medicalCheckupRepository.save(checkup);
+        return MedicalCheckupDetailResponse.fromEntity(savedCheckup);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TransferReferralPrintResponse getTransferReferralPaper(Long checkupId, String currentUsername) {
+        User currentUser = resolveCurrentUser(currentUsername);
+
+        if (currentUser.getRole() == Role.BAN_QUAN_LY) {
+            throw new AccessDeniedException("Ban quản lý không có quyền truy cập hồ sơ chuyển viện cá nhân của sinh viên");
+        }
+
+        MedicalCheckup checkup = medicalCheckupRepository.findByIdWithDetails(checkupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phiếu khám với ID: " + checkupId));
+
+        if (currentUser.getRole() == Role.SINH_VIEN) {
+            if (checkup.getStudent() == null || !checkup.getStudent().getId().equals(currentUser.getId())) {
+                throw new AccessDeniedException("Sinh viên chỉ được phép xem hoặc xuất giấy giới thiệu chuyển viện của chính mình");
+            }
+        }
+
+        TransferRecord transferRecord = checkup.getTransferRecord();
+        if (transferRecord == null && transferRecordRepository != null) {
+            transferRecord = transferRecordRepository.findByMedicalCheckupId(checkupId).orElse(null);
+        }
+        if (transferRecord == null) {
+            throw new ResourceNotFoundException("Phiếu khám (ID: " + checkupId + ") chưa có hồ sơ chuyển viện");
+        }
+
+        Long studentId = checkup.getStudent() != null ? checkup.getStudent().getId() : null;
+        HealthRecord healthRecord = (studentId != null && healthRecordRepository != null)
+                ? healthRecordRepository.findByStudentId(studentId).orElse(null)
+                : null;
+        HealthInsurance insurance = (studentId != null && healthInsuranceRepository != null)
+                ? healthInsuranceRepository.findByStudentIdWithDetails(studentId)
+                        .or(() -> healthInsuranceRepository.findByStudentId(studentId))
+                        .orElse(null)
+                : null;
+
+        return TransferReferralPrintResponse.fromEntities(checkup, transferRecord, healthRecord, insurance);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EmergencyCasePageResponse getEmergencyCases(
+            String keyword,
+            String emergencyLevel,
+            String emergencyType,
+            String currentStep,
+            String status,
+            LocalDate date,
+            Integer page,
+            Integer size,
+            String currentUsername
+    ) {
+        User currentUser = resolveCurrentUser(currentUsername);
+        validateDoctorRole(currentUser, "tra cứu danh sách ca cấp cứu");
+
+        String cleanKeyword = trimFilter(keyword);
+        String cleanLevel = trimFilter(emergencyLevel);
+        String cleanType = trimFilter(emergencyType);
+        String cleanStep = trimFilter(currentStep);
+        String normalizedFilterStep = cleanStep != null ? normalizeEmergencyStep(cleanStep) : null;
+        String cleanStatus = trimFilter(status);
+
+        List<MedicalCheckup> allEmergencies = medicalCheckupRepository.findEmergencyCasesWithDetails();
+        List<MedicalCheckup> safeList = allEmergencies != null ? allEmergencies : Collections.emptyList();
+
+        List<MedicalCheckupDetailResponse> filtered = safeList.stream()
+                .filter(mc -> Boolean.TRUE.equals(mc.getIsEmergency()))
+                .filter(mc -> matchesEmergencyKeyword(mc, cleanKeyword))
+                .filter(mc -> cleanLevel == null || (mc.getEmergencyLevel() != null && mc.getEmergencyLevel().equalsIgnoreCase(cleanLevel)))
+                .filter(mc -> cleanType == null || (mc.getEmergencyType() != null && mc.getEmergencyType().equalsIgnoreCase(cleanType)))
+                .filter(mc -> normalizedFilterStep == null || normalizedFilterStep.equalsIgnoreCase(MedicalCheckupDetailResponse.resolveEffectiveStep(mc)))
+                .filter(mc -> cleanStatus == null || (mc.getStatus() != null && mc.getStatus().equalsIgnoreCase(cleanStatus)))
+                .filter(mc -> date == null || (mc.getCreatedAt() != null && date.equals(mc.getCreatedAt().atZoneSameInstant(VIETNAM_ZONE).toLocalDate())))
+                .map(MedicalCheckupDetailResponse::fromEntity)
+                .toList();
+
+        int pageIndex = (page != null && page >= 0) ? page : 0;
+        int pageSize = (size != null && size > 0) ? size : 10;
+        int fromIndex = Math.min(pageIndex * pageSize, filtered.size());
+        int toIndex = Math.min(fromIndex + pageSize, filtered.size());
+        List<MedicalCheckupDetailResponse> pagedItems = filtered.subList(fromIndex, toIndex);
+
+        return new EmergencyCasePageResponse(pagedItems, pageIndex, pageSize, filtered.size());
+    }
+
+    @Override
+    @Transactional
+    public MedicalCheckupDetailResponse updateEmergencyProgress(
+            Long checkupId,
+            UpdateEmergencyProgressRequest request,
+            String currentUsername
+    ) {
+        if (request == null || request.getCurrentStep() == null || request.getCurrentStep().isBlank()) {
+            throw new BadRequestException("Bước xử lý hiện tại (currentStep) không được để trống");
+        }
+
+        User currentUser = resolveCurrentUser(currentUsername);
+        validateDoctorRole(currentUser, "cập nhật tiến độ ca cấp cứu");
+
+        MedicalCheckup checkup = medicalCheckupRepository.findByIdWithDetails(checkupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phiếu khám với ID: " + checkupId));
+
+        validateAssignedDoctor(checkup, currentUser, "cập nhật tiến độ ca cấp cứu này");
+        validateCheckupEditable(checkup, "cập nhật tiến độ ca cấp cứu");
+
+        if (!Boolean.TRUE.equals(checkup.getIsEmergency())) {
+            throw new BadRequestException("Chỉ có thể cập nhật tiến độ bước xử lý cho các ca tiếp nhận khẩn cấp / cấp cứu");
+        }
+
+        String normalizedStep = normalizeEmergencyStep(request.getCurrentStep());
+        checkup.setCurrentStep(normalizedStep);
+
+        if (request.getTreatmentSuggestions() != null && !request.getTreatmentSuggestions().isBlank()) {
+            checkup.setTreatmentSuggestions(request.getTreatmentSuggestions().trim());
+        }
+        if (request.getDiagnosisNotes() != null && !request.getDiagnosisNotes().isBlank()) {
+            checkup.setDiagnosisNotes(request.getDiagnosisNotes().trim());
+        }
+
+        if (STEP_KET_THUC.equals(normalizedStep)) {
+            checkup.markCompleted(OffsetDateTime.now());
+        }
+
+        MedicalCheckup savedCheckup = medicalCheckupRepository.save(checkup);
+        return MedicalCheckupDetailResponse.fromEntity(savedCheckup);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EmergencyStatsResponse getEmergencyStats(String currentUsername) {
+        User currentUser = resolveCurrentUser(currentUsername);
+        validateDoctorRole(currentUser, "xem thống kê ca cấp cứu");
+
+        List<MedicalCheckup> allEmergencies = medicalCheckupRepository.findEmergencyCasesWithDetails();
+        List<MedicalCheckup> safeList = allEmergencies != null ? allEmergencies : Collections.emptyList();
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
+
+        long inProgressCount = 0;
+        long firstAidCount = 0;
+        long transferringCount = 0;
+        long completedTodayCount = 0;
+
+        for (MedicalCheckup mc : safeList) {
+            if (!Boolean.TRUE.equals(mc.getIsEmergency())) {
+                continue;
+            }
+            String step = MedicalCheckupDetailResponse.resolveEffectiveStep(mc);
+            if (!mc.isCompleted()) {
+                inProgressCount++;
+                if (STEP_SO_CUU.equalsIgnoreCase(step)) {
+                    firstAidCount++;
+                }
+            }
+            if (STEP_CHUYEN_VIEN.equalsIgnoreCase(step) || mc.getTransferRecord() != null) {
+                transferringCount++;
+            }
+            if (mc.isCompleted()) {
+                OffsetDateTime refTime = mc.getCompletedAt() != null ? mc.getCompletedAt() : mc.getCreatedAt();
+                if (refTime != null && today.equals(refTime.atZoneSameInstant(VIETNAM_ZONE).toLocalDate())) {
+                    completedTodayCount++;
+                }
+            }
+        }
+
+        return new EmergencyStatsResponse(inProgressCount, firstAidCount, transferringCount, completedTodayCount);
+    }
+
     private void applyCompletion(MedicalCheckup checkup) {
         validateRequiredFieldsForCompletion(checkup);
 
@@ -583,6 +944,117 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
         }
         long fallback = System.currentTimeMillis() % 10000L;
         return String.format("PK%s%04d", datePart, fallback);
+    }
+
+    private String generateUniqueTransferRecordCode() {
+        String datePart = LocalDate.now().format(CODE_DATE_FORMAT);
+        for (int attempt = 0; attempt < 20; attempt++) {
+            int rand = SECURE_RANDOM.nextInt(10000);
+            String candidate = String.format("CV%s%04d", datePart, rand);
+            if (transferRecordRepository == null || !transferRecordRepository.existsByRecordCode(candidate)) {
+                return candidate;
+            }
+        }
+        long fallback = System.currentTimeMillis() % 10000L;
+        return String.format("CV%s%04d", datePart, fallback);
+    }
+
+    private String normalizeTransferReasonCategory(String rawCategory) {
+        if (rawCategory == null || rawCategory.isBlank()) {
+            throw new BadRequestException("Phân loại lý do chuyển viện không được để trống");
+        }
+        String upper = rawCategory.trim().toUpperCase(Locale.ROOT);
+        if (REASON_QUA_TAI.equals(upper) || "OVERLOAD".equals(upper)) {
+            return REASON_QUA_TAI;
+        }
+        if (REASON_THIEU_THIET_BI.equals(upper) || "LACK_OF_EQUIPMENT".equals(upper)) {
+            return REASON_THIEU_THIET_BI;
+        }
+        if (REASON_CAP_CUU_NANG.equals(upper) || "SEVERE_EMERGENCY".equals(upper)) {
+            return REASON_CAP_CUU_NANG;
+        }
+        throw new BadRequestException(
+                "Phân loại lý do chuyển viện không hợp lệ: " + rawCategory
+                        + ". Chỉ chấp nhận QUA_TAI, THIEU_THIET_BI hoặc CAP_CUU_NANG");
+    }
+
+    private String normalizeEmergencyLevel(String rawLevel) {
+        String cleaned = trimToNull(rawLevel);
+        if (cleaned == null) {
+            return null;
+        }
+        if (cleaned.length() > 20) {
+            throw new BadRequestException("Mức độ khẩn cấp không được vượt quá 20 ký tự");
+        }
+        return cleaned.toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeEmergencyType(String rawType) {
+        String cleaned = trimToNull(rawType);
+        if (cleaned == null) {
+            return null;
+        }
+        if (cleaned.length() > 50) {
+            throw new BadRequestException("Loại cấp cứu không được vượt quá 50 ký tự");
+        }
+        return cleaned;
+    }
+
+    private String normalizeReporterContact(String rawContact) {
+        String cleaned = trimToNull(rawContact);
+        if (cleaned == null) {
+            return null;
+        }
+        if (cleaned.length() > 150) {
+            throw new BadRequestException("Thông tin người báo cáo / liên hệ không được vượt quá 150 ký tự");
+        }
+        return cleaned;
+    }
+
+    private String normalizeEmergencyStep(String rawStep) {
+        String cleaned = trimToNull(rawStep);
+        if (cleaned == null) {
+            throw new BadRequestException("Bước xử lý hiện tại không được để trống");
+        }
+        String upper = cleaned.toUpperCase(Locale.ROOT);
+        return switch (upper) {
+            case STEP_TIEP_NHAN, "INTAKE", "DA_TIEP_NHAN", "RECEIVED" -> STEP_TIEP_NHAN;
+            case STEP_SO_CUU, "FIRST_AID", "DANG_SO_CUU", "INITIAL_FIRST_AID" -> STEP_SO_CUU;
+            case STEP_CHUYEN_VIEN, "TRANSFER", "TRANSFERRING", "DANG_CHUYEN_VIEN", "EXTERNAL_TRANSFER" -> STEP_CHUYEN_VIEN;
+            case STEP_KET_THUC, "COMPLETED", "DONE", "FINISHED", "DA_KET_THUC", "END" -> STEP_KET_THUC;
+            default -> throw new BadRequestException(
+                    "Bước xử lý cấp cứu không hợp lệ: " + rawStep
+                            + ". Chỉ chấp nhận TIEP_NHAN, SO_CUU, CHUYEN_VIEN hoặc KET_THUC");
+        };
+    }
+
+    private boolean matchesEmergencyKeyword(MedicalCheckup mc, String cleanKeyword) {
+        if (cleanKeyword == null) {
+            return true;
+        }
+        String q = cleanKeyword.toLowerCase(Locale.ROOT);
+        if (mc.getCheckupCode() != null && mc.getCheckupCode().toLowerCase(Locale.ROOT).contains(q)) {
+            return true;
+        }
+        Student student = mc.getStudent();
+        if (student != null) {
+            if (student.getStudentCode() != null && student.getStudentCode().toLowerCase(Locale.ROOT).contains(q)) {
+                return true;
+            }
+            if (student.getUser() != null && student.getUser().getFullName() != null
+                    && student.getUser().getFullName().toLowerCase(Locale.ROOT).contains(q)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String trimFilter(String value) {
+        String cleaned = trimToNull(value);
+        if (cleaned == null || "ALL".equalsIgnoreCase(cleaned)) {
+            return null;
+        }
+        return cleaned;
     }
 
     private String trimToNull(String value) {

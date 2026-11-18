@@ -617,4 +617,27 @@ class ShiftServiceImplTest {
         assertThat(response.getRoom()).isNull();
         assertThat(response.getStatus()).isEqualTo(ShiftStatus.OPEN);
     }
+
+    @Test
+    @DisplayName("Lấy danh sách cơ sở y tế và lọc ca khám theo facilityId")
+    void getFacilities_And_FilterByFacilityId() {
+        assertThat(shiftService.getFacilities()).hasSize(1);
+        assertThat(shiftService.getFacilities().get(0).getId()).isEqualTo(1L);
+        assertThat(shiftService.getFacilities().get(0).getName()).isEqualTo("Trung tâm Y tế Cơ sở Chính");
+
+        when(shiftRepository.findAllWithDoctor()).thenReturn(List.of(sampleShift));
+
+        // Khớp facilityId = 1
+        List<ShiftResponse> matched = shiftService.getShifts(null, null, null, null, null, null, null, 1L);
+        assertThat(matched).hasSize(1);
+        assertThat(matched.get(0).getFacilityId()).isEqualTo(1L);
+
+        // Không khớp facilityId = 99
+        List<ShiftResponse> unmatched = shiftService.getShifts(null, null, null, null, null, null, null, 99L);
+        assertThat(unmatched).isEmpty();
+
+        // getAvailableShifts với facilityId
+        List<ShiftResponse> availableMatched = shiftService.getAvailableShifts(null, null, null, null, null, null, 1L);
+        assertThat(availableMatched).hasSize(1);
+    }
 }

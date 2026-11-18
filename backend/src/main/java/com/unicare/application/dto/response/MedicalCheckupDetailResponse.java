@@ -31,6 +31,11 @@ public class MedicalCheckupDetailResponse {
     private String checkupCode;
     private String checkupType;
     private Boolean isEmergency;
+    private String emergencyLevel;
+    private String emergencyType;
+    private String reporterContact;
+    private String currentStep;
+    private String currentStepLabel;
     private String periodicResult;
     private Boolean isPeriodic;
     private String timelineCategory;
@@ -90,6 +95,7 @@ public class MedicalCheckupDetailResponse {
 
         boolean periodic = isPeriodicCheckup(entity.getCheckupType(), entity.getPeriodicResult());
         String category = resolveTimelineCategory(entity.getCheckupType(), periodic);
+        String resolvedStep = resolveEffectiveStep(entity);
 
         List<PrescribedMedicineResponse> medicines = entity.getPrescribedMedicines() != null
                 ? entity.getPrescribedMedicines().stream()
@@ -103,6 +109,11 @@ public class MedicalCheckupDetailResponse {
                 .checkupCode(entity.getCheckupCode())
                 .checkupType(entity.getCheckupType())
                 .isEmergency(entity.getIsEmergency())
+                .emergencyLevel(entity.getEmergencyLevel())
+                .emergencyType(entity.getEmergencyType())
+                .reporterContact(entity.getReporterContact())
+                .currentStep(resolvedStep)
+                .currentStepLabel(resolveStepLabel(resolvedStep))
                 .periodicResult(entity.getPeriodicResult())
                 .isPeriodic(periodic)
                 .timelineCategory(category)
@@ -158,5 +169,34 @@ public class MedicalCheckupDetailResponse {
             }
         }
         return "GENERAL";
+    }
+
+    public static String resolveEffectiveStep(MedicalCheckup entity) {
+        if (entity.getCurrentStep() != null && !entity.getCurrentStep().isBlank()) {
+            return entity.getCurrentStep();
+        }
+        if (!Boolean.TRUE.equals(entity.getIsEmergency())) {
+            return null;
+        }
+        if (entity.getTransferRecord() != null) {
+            return "CHUYEN_VIEN";
+        }
+        if (entity.isCompleted()) {
+            return "KET_THUC";
+        }
+        return "TIEP_NHAN";
+    }
+
+    public static String resolveStepLabel(String step) {
+        if (step == null) {
+            return null;
+        }
+        return switch (step.toUpperCase()) {
+            case "TIEP_NHAN" -> "Đã tiếp nhận";
+            case "SO_CUU" -> "Sơ cứu ban đầu";
+            case "CHUYEN_VIEN" -> "Chuyển viện ngoài";
+            case "KET_THUC" -> "Kết thúc ca";
+            default -> step;
+        };
     }
 }

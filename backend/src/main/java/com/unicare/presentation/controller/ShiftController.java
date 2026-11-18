@@ -44,10 +44,11 @@ public class ShiftController {
             @RequestParam(required = false) Long doctorId,
             @RequestParam(required = false) ServiceType serviceType,
             @RequestParam(required = false) ShiftStatus status,
-            @RequestParam(required = false) String room
+            @RequestParam(required = false) String room,
+            @RequestParam(required = false) Long facilityId
     ) {
         List<ShiftResponse> shifts = shiftService.getShifts(
-                date, fromDate, toDate, doctorId, serviceType, status, room
+                date, fromDate, toDate, doctorId, serviceType, status, room, facilityId
         );
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách ca khám thành công", shifts));
     }
@@ -65,11 +66,12 @@ public class ShiftController {
             @RequestParam(required = false) Long doctorId,
             @RequestParam(required = false) ServiceType serviceType,
             @RequestParam(required = false) ServiceType shiftType,
-            @RequestParam(required = false) String room
+            @RequestParam(required = false) String room,
+            @RequestParam(required = false) Long facilityId
     ) {
         ServiceType effectiveServiceType = serviceType != null ? serviceType : shiftType;
         List<ShiftResponse> shifts = shiftService.getAvailableShifts(
-                date, fromDate, toDate, doctorId, effectiveServiceType, room
+                date, fromDate, toDate, doctorId, effectiveServiceType, room, facilityId
         );
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách ca khám còn chỗ thành công", shifts));
     }

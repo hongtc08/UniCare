@@ -45,6 +45,18 @@ public class MedicalCheckup {
     @Builder.Default
     private Boolean isEmergency = false;
 
+    @Column(name = "emergency_level", length = 20)
+    private String emergencyLevel;
+
+    @Column(name = "emergency_type", length = 50)
+    private String emergencyType;
+
+    @Column(name = "reporter_contact", length = 150)
+    private String reporterContact;
+
+    @Column(name = "current_step", length = 30)
+    private String currentStep;
+
     @Column(name = "periodic_result", length = 20)
     private String periodicResult;
 

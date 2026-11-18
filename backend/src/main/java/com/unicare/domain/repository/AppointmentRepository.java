@@ -81,5 +81,22 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("status") String status
     );
 
+    @Query("SELECT COUNT(a) > 0 FROM Appointment a " +
+           "JOIN a.shift s " +
+           "WHERE a.student.id = :studentId " +
+           "AND a.id <> :excludedAppointmentId " +
+           "AND UPPER(a.status) = UPPER(:status) " +
+           "AND s.shiftDate = :shiftDate " +
+           "AND s.startTime < :endTime " +
+           "AND s.endTime > :startTime")
+    boolean existsOverlappingAppointmentExcludingId(
+            @Param("studentId") Long studentId,
+            @Param("excludedAppointmentId") Long excludedAppointmentId,
+            @Param("shiftDate") LocalDate shiftDate,
+            @Param("startTime") LocalTime startTime,
+            @Param("endTime") LocalTime endTime,
+            @Param("status") String status
+    );
+
     Optional<Appointment> findByAppointmentCode(String appointmentCode);
 }
