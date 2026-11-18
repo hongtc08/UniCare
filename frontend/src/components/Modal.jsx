@@ -1,15 +1,23 @@
 import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 
+function isBackdrop(event) {
+  if (event.target !== event.currentTarget) return false;
+  const { left, right, top, bottom } = event.currentTarget.getBoundingClientRect();
+  return event.clientX < left || event.clientX >= right || event.clientY < top || event.clientY >= bottom;
+}
+
 export default function Modal({
   isOpen,
   onClose,
   title,
   children,
   busy = false,
+  closeOnBackdrop = false,
   className = "",
 }) {
   const dialog = useRef(null);
+  const pointerStartedOnBackdrop = useRef(false);
   const titleId = useId();
 
   useEffect(() => {
@@ -33,6 +41,13 @@ export default function Modal({
       ref={dialog}
       className={`app-dialog ${className}`}
       aria-labelledby={titleId}
+      onPointerDown={(event) => {
+        pointerStartedOnBackdrop.current = closeOnBackdrop && isBackdrop(event);
+      }}
+      onClick={(event) => {
+        if (closeOnBackdrop && !busy && pointerStartedOnBackdrop.current && isBackdrop(event)) onClose();
+        pointerStartedOnBackdrop.current = false;
+      }}
       onCancel={(event) => {
         event.preventDefault();
         if (!busy) onClose();

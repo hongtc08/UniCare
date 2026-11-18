@@ -14,6 +14,7 @@ import Catalogs from "./pages/admin/Catalogs";
 import ShiftManagement from "./pages/ShiftManagement";
 import StudentBooking from "./pages/appointments/StudentBooking";
 import MyAppointments from "./pages/appointments/MyAppointments";
+import StudentMedicalHistory from "./pages/medical-history/StudentMedicalHistory";
 import GeneralExaminationPage from "./pages/doctor/GeneralExaminationPage";
 
 function HomeRedirect() {
@@ -70,6 +71,7 @@ export default function App() {
               <Route element={<ProtectedRoute allowedRoles={["SINH_VIEN"]} />}>
                 <Route path="/lich-kham" element={<StudentBooking />} />
                 <Route path="/lich-hen-cua-toi" element={<MyAppointments />} />
+                <Route path="/lich-su-kham" element={<StudentMedicalHistory />} />
                 <Route path="/mental-health" element={<UpcomingFeature />} />
                 <Route path="/health-knowledge" element={<UpcomingFeature />} />
               </Route>
