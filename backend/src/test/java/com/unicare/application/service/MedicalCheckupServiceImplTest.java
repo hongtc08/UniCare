@@ -1502,10 +1502,42 @@ class MedicalCheckupServiceImplTest {
         assertThat(statsDto.getCompletedTodayCount()).isEqualTo(3L);
 
         assertThat(TransferReferralPrintResponse.fromEntities(null, null, null, null)).isNull();
+        assertThat(TransferReferralPrintResponse.fromEntities(draftCheckup, null, null, null)).isNull();
         assertThat(TransferReferralPrintResponse.resolveReasonCategoryLabel(null)).isNull();
         assertThat(TransferReferralPrintResponse.resolveReasonCategoryLabel("QUA_TAI")).isEqualTo("Quá tải");
         assertThat(TransferReferralPrintResponse.resolveReasonCategoryLabel("CAP_CUU_NANG")).contains("Cấp cứu nặng");
         assertThat(TransferReferralPrintResponse.resolveReasonCategoryLabel("OTHER")).isEqualTo("OTHER");
+
+        // Kiểm tra các nhánh null-safe trong TransferReferralPrintResponse.fromEntities
+        TransferRecord trMinimal = TransferRecord.builder().id(99L).recordCode("CV99").targetHospital("BV").reasonCategory("QUA_TAI").build();
+        MedicalCheckup checkupMinimal = new MedicalCheckup();
+        checkupMinimal.setId(99L);
+        checkupMinimal.setPrescribedMedicines(null);
+        HealthRecord emptyHr = new HealthRecord();
+        TransferReferralPrintResponse minimalPrint = TransferReferralPrintResponse.fromEntities(checkupMinimal, trMinimal, emptyHr, null);
+        assertThat(minimalPrint).isNotNull();
+        assertThat(minimalPrint.getHeight()).isNull();
+        assertThat(minimalPrint.getWeight()).isNull();
+        assertThat(minimalPrint.getBmi()).isNull();
+        assertThat(minimalPrint.getDiseaseGroupName()).isNull();
+        assertThat(minimalPrint.getDoctorName()).isNull();
+
+        Student studentNoUserNoClass = Student.builder().id(15L).studentCode("SV15").build();
+        MedicalStaff staffNoUser = MedicalStaff.builder().id(25L).staffCode("NV25").build();
+        checkupMinimal.setStudent(studentNoUserNoClass);
+        checkupMinimal.setStaff(staffNoUser);
+        TransferReferralPrintResponse partialPrint = TransferReferralPrintResponse.fromEntities(checkupMinimal, trMinimal, null, null);
+        assertThat(partialPrint.getStudentId()).isEqualTo(15L);
+        assertThat(partialPrint.getStaffId()).isEqualTo(25L);
+
+        // Kiểm tra MedicalCheckupDetailResponse.resolveEffectiveStep & resolveStepLabel
+        MedicalCheckup emNoStepDraft = MedicalCheckup.builder().isEmergency(true).status("DRAFT").currentStep("  ").build();
+        assertThat(MedicalCheckupDetailResponse.resolveEffectiveStep(emNoStepDraft)).isEqualTo("TIEP_NHAN");
+        MedicalCheckup emNoStepCompleted = MedicalCheckup.builder().isEmergency(true).status("COMPLETED").build();
+        assertThat(MedicalCheckupDetailResponse.resolveEffectiveStep(emNoStepCompleted)).isEqualTo("KET_THUC");
+        MedicalCheckup emNoStepTransferred = MedicalCheckup.builder().isEmergency(true).transferRecord(trMinimal).build();
+        assertThat(MedicalCheckupDetailResponse.resolveEffectiveStep(emNoStepTransferred)).isEqualTo("CHUYEN_VIEN");
+        assertThat(MedicalCheckupDetailResponse.resolveStepLabel("CUSTOM_STEP")).isEqualTo("CUSTOM_STEP");
 
         CreateTransferRecordRequest transferReqDto = new CreateTransferRecordRequest();
         OffsetDateTime now = OffsetDateTime.now();
@@ -1531,5 +1563,125 @@ class MedicalCheckupServiceImplTest {
         assertThat(progressReqDto.getCurrentStep()).isEqualTo("SO_CUU");
         assertThat(progressReqDto.getTreatmentSuggestions()).isEqualTo("Sơ cứu");
         assertThat(progressReqDto.getDiagnosisNotes()).isEqualTo("Chẩn đoán");
+    }
+
+    @Test
+    @DisplayName("Kiểm tra cập nhật phiếu khám cấp cứu (updateCheckup), bộ lọc danh sách ca cấp cứu & các nhánh phụ")
+    void emergencyCheckup_UpdateAndFilterBranches() {
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(studentRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(student));
+        when(medicalCheckupRepository.save(any(MedicalCheckup.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // 1. Tạo phiếu cấp cứu truyền sẵn currentStep = KET_THUC
+        CreateMedicalCheckupRequest createDoneReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L)
+                .isEmergency(true)
+                .currentStep("KET_THUC")
+                .symptoms("Sốt cao")
+                .diagnosisNotes("Sốt siêu vi")
+                .build();
+        MedicalCheckupDetailResponse createdDone = medicalCheckupService.createCheckup(createDoneReq, "bs001");
+        assertThat(createdDone.getStatus()).isEqualTo("COMPLETED");
+        assertThat(createdDone.getCurrentStep()).isEqualTo("KET_THUC");
+
+        // 2. Cập nhật phiếu khám cấp cứu (updateCheckup với isEmergency = true)
+        draftCheckup.setAppointment(null);
+        draftCheckup.setIsEmergency(true);
+        draftCheckup.setCurrentStep(null);
+        when(medicalCheckupRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(draftCheckup));
+
+        UpdateMedicalCheckupRequest updateEmReq = UpdateMedicalCheckupRequest.builder()
+                .isEmergency(true)
+                .emergencyLevel("CAP_CUU")
+                .emergencyType("Ngộ độc thực phẩm")
+                .reporterContact("Quản lý KTX")
+                .currentStep("CHUYEN_VIEN")
+                .symptoms("Đau bụng, nôn ói")
+                .diagnosisNotes("Theo dõi ngộ độc")
+                .treatmentSuggestions("Bù dịch")
+                .status("DRAFT")
+                .build();
+        MedicalCheckupDetailResponse updatedEm = medicalCheckupService.updateCheckup(1L, updateEmReq, "bs001");
+        assertThat(updatedEm.getEmergencyLevel()).isEqualTo("CAP_CUU");
+        assertThat(updatedEm.getEmergencyType()).isEqualTo("Ngộ độc thực phẩm");
+        assertThat(updatedEm.getReporterContact()).isEqualTo("Quản lý KTX");
+        assertThat(updatedEm.getCurrentStep()).isEqualTo("CHUYEN_VIEN");
+
+        // Cập nhật không truyền currentStep khi currentStep trên entity đang null -> tự gán TIEP_NHAN
+        draftCheckup.setCurrentStep(null);
+        UpdateMedicalCheckupRequest updateDefaultStep = UpdateMedicalCheckupRequest.builder()
+                .symptoms("Đau đầu")
+                .diagnosisNotes("Theo dõi")
+                .status("COMPLETED")
+                .build();
+        MedicalCheckupDetailResponse completedEm = medicalCheckupService.updateCheckup(1L, updateDefaultStep, "bs001");
+        assertThat(completedEm.getCurrentStep()).isEqualTo("KET_THUC");
+        assertThat(completedEm.getStatus()).isEqualTo("COMPLETED");
+
+        // 3. Lập hồ sơ chuyển viện cho ca khám thường (không phải cấp cứu, đã có sẵn symptoms/diagnosis/treatment, không có appointment)
+        draftCheckup.setStatus("DRAFT");
+        draftCheckup.setIsEmergency(false);
+        draftCheckup.setSymptoms("Đã có triệu chứng");
+        draftCheckup.setDiagnosisNotes("Đã có chẩn đoán");
+        draftCheckup.setTreatmentSuggestions("Đã có hướng xử trí");
+        when(transferRecordRepository.existsByMedicalCheckupId(1L)).thenReturn(false);
+        when(transferRecordRepository.save(any(TransferRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreateTransferRecordRequest transferOverload = new CreateTransferRecordRequest(
+                "BV Đa khoa", "OVERLOAD", "Quá tải", "Ổn định", "Sơ cứu", null, null
+        );
+        MedicalCheckupDetailResponse transferredNormal = medicalCheckupService.createTransferRecord(1L, transferOverload, "bs001");
+        assertThat(transferredNormal.getTransferRecord().getReasonCategory()).isEqualTo("QUA_TAI");
+
+        // 4. getEmergencyCases với các nhánh bộ lọc null, ALL, tìm theo checkupCode, tìm theo fullName và không khớp
+        MedicalCheckup c1 = MedicalCheckup.builder()
+                .id(601L)
+                .checkupCode("PK2611180601")
+                .student(student)
+                .staff(doctorStaff)
+                .isEmergency(true)
+                .emergencyLevel("CAP_CUU")
+                .emergencyType("Sốt cao")
+                .currentStep("TIEP_NHAN")
+                .status("DRAFT")
+                .createdAt(OffsetDateTime.now())
+                .build();
+        when(medicalCheckupRepository.findEmergencyCasesWithDetails()).thenReturn(List.of(c1));
+
+        // Bộ lọc hoàn toàn null & page/size âm
+        EmergencyCasePageResponse allPage = medicalCheckupService.getEmergencyCases(
+                null, "ALL", null, null, null, null, -1, 0, "bs001"
+        );
+        assertThat(allPage.getTotalElements()).isEqualTo(1L);
+
+        // Tìm theo checkupCode
+        assertThat(medicalCheckupService.getEmergencyCases(
+                "PK2611180601", null, null, "INTAKE", null, null, null, null, "bs001"
+        ).getTotalElements()).isEqualTo(1L);
+
+        // Tìm theo họ tên sinh viên
+        assertThat(medicalCheckupService.getEmergencyCases(
+                "Nguyễn Văn Sinh Viên", null, null, null, null, null, 0, 5, "bs001"
+        ).getTotalElements()).isEqualTo(1L);
+
+        // Tìm từ khóa không khớp & các bộ lọc không khớp
+        assertThat(medicalCheckupService.getEmergencyCases(
+                "KHONG_TON_TAI", null, null, null, null, null, 0, 5, "bs001"
+        ).getTotalElements()).isZero();
+        assertThat(medicalCheckupService.getEmergencyCases(
+                null, "THAP", null, null, null, null, 0, 5, "bs001"
+        ).getTotalElements()).isZero();
+        assertThat(medicalCheckupService.getEmergencyCases(
+                null, null, "Dị ứng", null, null, null, 0, 5, "bs001"
+        ).getTotalElements()).isZero();
+        assertThat(medicalCheckupService.getEmergencyCases(
+                null, null, null, "SO_CUU", null, null, 0, 5, "bs001"
+        ).getTotalElements()).isZero();
+        assertThat(medicalCheckupService.getEmergencyCases(
+                null, null, null, null, "COMPLETED", null, 0, 5, "bs001"
+        ).getTotalElements()).isZero();
+        assertThat(medicalCheckupService.getEmergencyCases(
+                null, null, null, null, null, LocalDate.now().minusDays(5), 0, 5, "bs001"
+        ).getTotalElements()).isZero();
     }
 }

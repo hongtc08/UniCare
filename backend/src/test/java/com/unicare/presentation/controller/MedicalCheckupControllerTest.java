@@ -580,5 +580,47 @@ class MedicalCheckupControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.currentStep").value("SO_CUU"));
+
+        // Kiểm tra nhánh principal == null & isEmergency đã truyền sẵn cho các endpoint mới
+        CreateTransferRecordRequest trReq = new CreateTransferRecordRequest(
+                "BV Thủ Đức", "QUA_TAI", "Lý do", "Tình trạng", "Sơ cứu", null, null
+        );
+        when(medicalCheckupService.createTransferRecord(eq(1L), any(CreateTransferRecordRequest.class), eq(null)))
+                .thenReturn(sampleDetailResponse);
+        mockMvc.perform(post("/api/medical-records/1/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(trReq)))
+                .andExpect(status().isCreated());
+
+        when(medicalCheckupService.getTransferReferralPaper(1L, null)).thenReturn(new TransferReferralPrintResponse());
+        mockMvc.perform(get("/api/medical-records/1/transfer"))
+                .andExpect(status().isOk());
+
+        CreateMedicalCheckupRequest explicitEmReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L)
+                .isEmergency(true)
+                .build();
+        when(medicalCheckupService.createCheckup(any(CreateMedicalCheckupRequest.class), eq(null)))
+                .thenReturn(sampleDetailResponse);
+        mockMvc.perform(post("/api/medical-records/emergencies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(explicitEmReq)))
+                .andExpect(status().isCreated());
+
+        when(medicalCheckupService.getEmergencyCases(any(), any(), any(), any(), any(), any(), any(), any(), eq(null)))
+                .thenReturn(pageRes);
+        mockMvc.perform(get("/api/medical-records/emergencies"))
+                .andExpect(status().isOk());
+
+        when(medicalCheckupService.getEmergencyStats(null)).thenReturn(statsRes);
+        mockMvc.perform(get("/api/medical-records/emergencies/stats"))
+                .andExpect(status().isOk());
+
+        when(medicalCheckupService.updateEmergencyProgress(eq(1L), any(UpdateEmergencyProgressRequest.class), eq(null)))
+                .thenReturn(sampleDetailResponse);
+        mockMvc.perform(put("/api/medical-records/1/step")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(progressReq)))
+                .andExpect(status().isOk());
     }
 }
