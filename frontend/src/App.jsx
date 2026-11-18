@@ -15,6 +15,7 @@ import ShiftManagement from "./pages/ShiftManagement";
 import StudentBooking from "./pages/appointments/StudentBooking";
 import MyAppointments from "./pages/appointments/MyAppointments";
 import StudentMedicalHistory from "./pages/medical-history/StudentMedicalHistory";
+import EmergencyIntake from "./pages/emergency/EmergencyIntake";
 import GeneralExaminationPage from "./pages/doctor/GeneralExaminationPage";
 
 function HomeRedirect() {
@@ -56,7 +57,7 @@ export default function App() {
                 <Route path="/doctor/checkups/new" element={<GeneralExaminationPage />} />
                 <Route path="/doctor/checkups/:id" element={<GeneralExaminationPage />} />
                 <Route path="/medical-records" element={<UpcomingFeature />} />
-                <Route path="/emergency" element={<UpcomingFeature />} />
+                <Route path="/emergency" element={<EmergencyIntake />} />
               </Route>
               {/* Phân hệ Quản lý Lịch trực & Mở ca khám: Chỉ dành cho Bác sĩ/Nhân viên y tế và Quản lý */}
               <Route

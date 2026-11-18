@@ -11,6 +11,7 @@ export default function Modal({
   isOpen,
   onClose,
   title,
+  description,
   children,
   busy = false,
   closeOnBackdrop = false,
@@ -48,13 +49,19 @@ export default function Modal({
         if (closeOnBackdrop && !busy && pointerStartedOnBackdrop.current && isBackdrop(event)) onClose();
         pointerStartedOnBackdrop.current = false;
       }}
+      aria-describedby={description ? `${titleId}-description` : undefined}
       onCancel={(event) => {
         event.preventDefault();
         if (!busy) onClose();
       }}
     >
       <div className="dialog-heading">
-        <h2 id={titleId}>{title}</h2>
+        {description ? (
+          <div>
+            <h2 id={titleId}>{title}</h2>
+            <p id={`${titleId}-description`}>{description}</p>
+          </div>
+        ) : <h2 id={titleId}>{title}</h2>}
         <button
           type="button"
           className="icon-button"
