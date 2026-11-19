@@ -6,6 +6,7 @@ export const navigation = {
     { to: "/profile", label: "Hồ sơ sức khỏe", icon: Heart },
     { to: "/lich-kham", label: "Đặt lịch khám", icon: CalendarRange },
     { to: "/lich-hen-cua-toi", label: "Lịch hẹn của tôi", icon: Clock },
+    { to: "/lich-su-kham", label: "Lịch sử khám bệnh", icon: ClipboardList },
     { to: "/mental-health", label: "Sức khỏe tinh thần", icon: Activity },
     { to: "/health-knowledge", label: "Kiến thức sức khỏe", icon: BookOpen },
   ],
