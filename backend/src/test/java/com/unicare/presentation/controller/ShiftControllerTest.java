@@ -71,17 +71,19 @@ class ShiftControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/shifts - Trả về danh sách ca khám (hỗ trợ lọc theo room) thành công")
+    @DisplayName("GET /api/shifts - Trả về danh sách ca khám (hỗ trợ lọc theo room & facilityId) thành công")
     void getShifts_ReturnsList() throws Exception {
-        when(shiftService.getShifts(any(), any(), any(), any(), any(), any(), eq("P.101")))
+        when(shiftService.getShifts(any(), any(), any(), any(), any(), any(), eq("P.101"), eq(1L)))
                 .thenReturn(List.of(sampleResponse));
 
         mockMvc.perform(get("/api/shifts")
                         .param("serviceType", "KHAM_DA_KHOA")
-                        .param("room", "P.101"))
+                        .param("room", "P.101")
+                        .param("facilityId", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[0].id").value(1))
+                .andExpect(jsonPath("$.data[0].facilityId").value(1))
                 .andExpect(jsonPath("$.data[0].serviceType").value("KHAM_DA_KHOA"))
                 .andExpect(jsonPath("$.data[0].room").value("P.101 - Phòng y tế"))
                 .andExpect(jsonPath("$.data[0].status").value("OPEN"));
@@ -91,7 +93,7 @@ class ShiftControllerTest {
     @DisplayName("GET /api/shifts/available - Trả về danh sách ca khám còn chỗ theo ngày & loại dịch vụ")
     void getAvailableShifts_ReturnsList() throws Exception {
         when(shiftService.getAvailableShifts(
-                eq(LocalDate.of(2026, 10, 28)), any(), any(), any(), eq(ServiceType.KHAM_DA_KHOA), any()))
+                eq(LocalDate.of(2026, 10, 28)), any(), any(), any(), eq(ServiceType.KHAM_DA_KHOA), any(), any()))
                 .thenReturn(List.of(sampleResponse));
 
         mockMvc.perform(get("/api/shifts/available")

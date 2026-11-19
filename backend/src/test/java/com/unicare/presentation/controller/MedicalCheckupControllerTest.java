@@ -2,12 +2,18 @@ package com.unicare.presentation.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicare.application.dto.request.CreateMedicalCheckupRequest;
+import com.unicare.application.dto.request.CreateTransferRecordRequest;
 import com.unicare.application.dto.request.PrescribedMedicineRequest;
+import com.unicare.application.dto.request.UpdateEmergencyProgressRequest;
 import com.unicare.application.dto.request.UpdateMedicalCheckupRequest;
 import com.unicare.application.dto.request.UpdatePrescriptionRequest;
+import com.unicare.application.dto.response.EmergencyCasePageResponse;
+import com.unicare.application.dto.response.EmergencyStatsResponse;
 import com.unicare.application.dto.response.MedicalCheckupDetailResponse;
 import com.unicare.application.dto.response.PrescribedMedicineResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
+import com.unicare.application.dto.response.TransferRecordResponse;
+import com.unicare.application.dto.response.TransferReferralPrintResponse;
 import com.unicare.application.service.MedicalCheckupService;
 import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.DuplicateResourceException;
@@ -437,5 +443,184 @@ class MedicalCheckupControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/medical-records/{id}/transfer: Bác sĩ lập hồ sơ chuyển viện & kết thúc ca khám thành công (201 Created)")
+    void createTransferRecord_Success() throws Exception {
+        TransferRecordResponse trRes = TransferRecordResponse.builder()
+                .id(77L)
+                .recordCode("CV2611180001")
+                .checkupId(1L)
+                .targetHospital("Bệnh viện Đa khoa Khu vực Thủ Đức")
+                .reasonCategory("CAP_CUU_NANG")
+                .transferReason("Viêm ruột thừa cấp")
+                .currentCondition("Đau bụng hố chậu phải")
+                .firstAidNotes("Theo dõi sinh hiệu")
+                .build();
+        sampleDetailResponse.setStatus("COMPLETED");
+        sampleDetailResponse.setTransferRecord(trRes);
+
+        when(medicalCheckupService.createTransferRecord(eq(1L), any(CreateTransferRecordRequest.class), eq("bs001")))
+                .thenReturn(sampleDetailResponse);
+
+        CreateTransferRecordRequest request = new CreateTransferRecordRequest(
+                "Bệnh viện Đa khoa Khu vực Thủ Đức",
+                "CAP_CUU_NANG",
+                "Viêm ruột thừa cấp",
+                "Đau bụng hố chậu phải",
+                "Theo dõi sinh hiệu",
+                null,
+                null
+        );
+
+        mockMvc.perform(post("/api/medical-records/1/transfer")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.transferRecord.recordCode").value("CV2611180001"))
+                .andExpect(jsonPath("$.data.transferRecord.targetHospital").value("Bệnh viện Đa khoa Khu vực Thủ Đức"));
+    }
+
+    @Test
+    @DisplayName("GET /api/medical-records/{id}/transfer/print: Kết xuất bản in Giấy giới thiệu chuyển viện thành công (200 OK)")
+    void getTransferReferralPaper_Success() throws Exception {
+        TransferReferralPrintResponse printRes = new TransferReferralPrintResponse();
+        printRes.setTransferId(77L);
+        printRes.setRecordCode("CV2611180001");
+        printRes.setCheckupId(1L);
+        printRes.setCheckupCode("PK2611120001");
+        printRes.setTargetHospital("Bệnh viện Đa khoa Khu vực Thủ Đức");
+        printRes.setReasonCategory("CAP_CUU_NANG");
+        printRes.setReasonCategoryLabel("Cấp cứu nặng vượt khả năng chuyên môn");
+        printRes.setStudentName("Nguyễn Văn A");
+        printRes.setStudentCode("24520001");
+
+        when(medicalCheckupService.getTransferReferralPaper(1L, "bs001")).thenReturn(printRes);
+
+        mockMvc.perform(get("/api/medical-records/1/transfer/print")
+                        .principal(mockPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.recordCode").value("CV2611180001"))
+                .andExpect(jsonPath("$.data.targetHospital").value("Bệnh viện Đa khoa Khu vực Thủ Đức"))
+                .andExpect(jsonPath("$.data.readOnly").value(true));
+    }
+
+    @Test
+    @DisplayName("POST /api/medical-records/emergencies, GET /emergencies, GET /emergencies/stats và PUT /{id}/progress")
+    void emergencyEndpoints_Success() throws Exception {
+        sampleDetailResponse.setIsEmergency(true);
+        sampleDetailResponse.setEmergencyLevel("KHAN_CAP");
+        sampleDetailResponse.setEmergencyType("Chấn thương");
+        sampleDetailResponse.setReporterContact("0901234567");
+        sampleDetailResponse.setCurrentStep("TIEP_NHAN");
+
+        when(medicalCheckupService.createCheckup(any(CreateMedicalCheckupRequest.class), eq("bs001")))
+                .thenReturn(sampleDetailResponse);
+
+        CreateMedicalCheckupRequest intakeReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L)
+                .emergencyLevel("KHAN_CAP")
+                .emergencyType("Chấn thương")
+                .reporterContact("0901234567")
+                .symptoms("Trật khớp")
+                .build();
+
+        mockMvc.perform(post("/api/medical-records/emergencies")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(intakeReq)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.isEmergency").value(true))
+                .andExpect(jsonPath("$.data.emergencyLevel").value("KHAN_CAP"))
+                .andExpect(jsonPath("$.data.currentStep").value("TIEP_NHAN"));
+
+        // GET /api/medical-records/emergencies
+        EmergencyCasePageResponse pageRes = new EmergencyCasePageResponse(List.of(sampleDetailResponse), 0, 10, 1L);
+        when(medicalCheckupService.getEmergencyCases(any(), any(), any(), any(), any(), any(), eq(0), eq(10), eq("bs001")))
+                .thenReturn(pageRes);
+
+        mockMvc.perform(get("/api/medical-records/emergencies")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .principal(mockPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.items[0].checkupCode").value("PK2611040001"));
+
+        // GET /api/medical-records/emergencies/stats
+        EmergencyStatsResponse statsRes = new EmergencyStatsResponse(2L, 1L, 1L, 3L);
+        when(medicalCheckupService.getEmergencyStats("bs001")).thenReturn(statsRes);
+
+        mockMvc.perform(get("/api/medical-records/emergencies/stats")
+                        .principal(mockPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.inProgressCount").value(2))
+                .andExpect(jsonPath("$.data.firstAidCount").value(1))
+                .andExpect(jsonPath("$.data.transferringCount").value(1))
+                .andExpect(jsonPath("$.data.completedTodayCount").value(3));
+
+        // PUT /api/medical-records/1/progress
+        sampleDetailResponse.setCurrentStep("SO_CUU");
+        when(medicalCheckupService.updateEmergencyProgress(eq(1L), any(UpdateEmergencyProgressRequest.class), eq("bs001")))
+                .thenReturn(sampleDetailResponse);
+
+        UpdateEmergencyProgressRequest progressReq = new UpdateEmergencyProgressRequest("SO_CUU", "Băng bó", "Chấn thương nhẹ");
+        mockMvc.perform(put("/api/medical-records/1/progress")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(progressReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.currentStep").value("SO_CUU"));
+
+        // Kiểm tra nhánh principal == null & isEmergency đã truyền sẵn cho các endpoint mới
+        CreateTransferRecordRequest trReq = new CreateTransferRecordRequest(
+                "BV Thủ Đức", "QUA_TAI", "Lý do", "Tình trạng", "Sơ cứu", null, null
+        );
+        when(medicalCheckupService.createTransferRecord(eq(1L), any(CreateTransferRecordRequest.class), eq(null)))
+                .thenReturn(sampleDetailResponse);
+        mockMvc.perform(post("/api/medical-records/1/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(trReq)))
+                .andExpect(status().isCreated());
+
+        when(medicalCheckupService.getTransferReferralPaper(1L, null)).thenReturn(new TransferReferralPrintResponse());
+        mockMvc.perform(get("/api/medical-records/1/transfer"))
+                .andExpect(status().isOk());
+
+        CreateMedicalCheckupRequest explicitEmReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L)
+                .isEmergency(true)
+                .build();
+        when(medicalCheckupService.createCheckup(any(CreateMedicalCheckupRequest.class), eq(null)))
+                .thenReturn(sampleDetailResponse);
+        mockMvc.perform(post("/api/medical-records/emergencies")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(explicitEmReq)))
+                .andExpect(status().isCreated());
+
+        when(medicalCheckupService.getEmergencyCases(any(), any(), any(), any(), any(), any(), any(), any(), eq(null)))
+                .thenReturn(pageRes);
+        mockMvc.perform(get("/api/medical-records/emergencies"))
+                .andExpect(status().isOk());
+
+        when(medicalCheckupService.getEmergencyStats(null)).thenReturn(statsRes);
+        mockMvc.perform(get("/api/medical-records/emergencies/stats"))
+                .andExpect(status().isOk());
+
+        when(medicalCheckupService.updateEmergencyProgress(eq(1L), any(UpdateEmergencyProgressRequest.class), eq(null)))
+                .thenReturn(sampleDetailResponse);
+        mockMvc.perform(put("/api/medical-records/1/step")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(progressReq)))
+                .andExpect(status().isOk());
     }
 }

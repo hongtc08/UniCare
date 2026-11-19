@@ -1,11 +1,17 @@
 package com.unicare.application.service;
 
 import com.unicare.application.dto.request.CreateMedicalCheckupRequest;
+import com.unicare.application.dto.request.CreateTransferRecordRequest;
+import com.unicare.application.dto.request.UpdateEmergencyProgressRequest;
 import com.unicare.application.dto.request.UpdateMedicalCheckupRequest;
 import com.unicare.application.dto.request.UpdatePrescriptionRequest;
+import com.unicare.application.dto.response.EmergencyCasePageResponse;
+import com.unicare.application.dto.response.EmergencyStatsResponse;
 import com.unicare.application.dto.response.MedicalCheckupDetailResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
+import com.unicare.application.dto.response.TransferReferralPrintResponse;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface MedicalCheckupService {
@@ -58,4 +64,40 @@ public interface MedicalCheckupService {
      * kèm đơn thuốc và hồ sơ chuyển viện (nếu có) của chính Sinh viên đang đăng nhập.
      */
     List<MedicalCheckupDetailResponse> getStudentMedicalHistory(String currentUsername, Long requestedStudentId);
+
+    /**
+     * Lập Hồ sơ Chuyển viện trên bảng transfer_records (POST /api/medical-records/{id}/transfer):
+     * Lưu thông tin chuyển tuyến, khóa chỉ đọc hồ sơ chuyển viện và tự động kết thúc ca khám tại trường.
+     */
+    MedicalCheckupDetailResponse createTransferRecord(Long checkupId, CreateTransferRecordRequest request, String currentUsername);
+
+    /**
+     * Kết xuất dữ liệu chuẩn / bản in để xuất Giấy giới thiệu chuyển viện (GET /api/medical-records/{id}/transfer/print).
+     */
+    TransferReferralPrintResponse getTransferReferralPaper(Long checkupId, String currentUsername);
+
+    /**
+     * Lấy danh sách ca cấp cứu đã lưu, hỗ trợ bộ lọc và phân trang (GET /api/medical-records/emergencies).
+     */
+    EmergencyCasePageResponse getEmergencyCases(
+            String keyword,
+            String emergencyLevel,
+            String emergencyType,
+            String currentStep,
+            String status,
+            LocalDate date,
+            Integer page,
+            Integer size,
+            String currentUsername
+    );
+
+    /**
+     * Cập nhật tiến độ (bước xử lý hiện tại) của ca cấp cứu khi chuyển sang sơ cứu, chuyển viện hoặc kết thúc.
+     */
+    MedicalCheckupDetailResponse updateEmergencyProgress(Long checkupId, UpdateEmergencyProgressRequest request, String currentUsername);
+
+    /**
+     * Lấy số liệu thống kê ca cấp cứu: đang xử lý, đang sơ cứu, đang chuyển viện và đã kết thúc hôm nay.
+     */
+    EmergencyStatsResponse getEmergencyStats(String currentUsername);
 }

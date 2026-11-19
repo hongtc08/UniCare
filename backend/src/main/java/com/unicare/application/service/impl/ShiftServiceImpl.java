@@ -5,6 +5,7 @@ package com.unicare.application.service.impl;
 
 import com.unicare.application.dto.request.ShiftRequest;
 import com.unicare.application.dto.response.DoctorOptionResponse;
+import com.unicare.application.dto.response.FacilityResponse;
 import com.unicare.application.dto.response.ShiftResponse;
 import com.unicare.application.service.ShiftService;
 import com.unicare.common.exception.BadRequestException;
@@ -48,6 +49,14 @@ public class ShiftServiceImpl implements ShiftService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<FacilityResponse> getFacilities() {
+        return List.of(
+                new FacilityResponse(ShiftResponse.DEFAULT_FACILITY_ID, ShiftResponse.DEFAULT_FACILITY_NAME)
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<ShiftResponse> getShifts(
             LocalDate date,
             LocalDate fromDate,
@@ -56,6 +65,21 @@ public class ShiftServiceImpl implements ShiftService {
             ServiceType serviceType,
             ShiftStatus status,
             String room
+    ) {
+        return getShifts(date, fromDate, toDate, doctorId, serviceType, status, room, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ShiftResponse> getShifts(
+            LocalDate date,
+            LocalDate fromDate,
+            LocalDate toDate,
+            Long doctorId,
+            ServiceType serviceType,
+            ShiftStatus status,
+            String room,
+            Long facilityId
     ) {
         if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
             throw new BadRequestException("Ngày kết thúc tìm kiếm không được nhỏ hơn ngày bắt đầu.");
@@ -75,6 +99,7 @@ public class ShiftServiceImpl implements ShiftService {
                 .filter(s -> status == null || status == s.getStatus())
                 .filter(s -> cleanRoom == null || (s.getRoom() != null && s.getRoom().toLowerCase(Locale.ROOT).contains(cleanRoom)))
                 .map(ShiftResponse::fromEntity)
+                .filter(s -> facilityId == null || facilityId.equals(s.getFacilityId()))
                 .collect(Collectors.toList());
     }
 
@@ -88,7 +113,21 @@ public class ShiftServiceImpl implements ShiftService {
             ServiceType serviceType,
             String room
     ) {
-        return getShifts(date, fromDate, toDate, doctorId, serviceType, ShiftStatus.OPEN, room).stream()
+        return getAvailableShifts(date, fromDate, toDate, doctorId, serviceType, room, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ShiftResponse> getAvailableShifts(
+            LocalDate date,
+            LocalDate fromDate,
+            LocalDate toDate,
+            Long doctorId,
+            ServiceType serviceType,
+            String room,
+            Long facilityId
+    ) {
+        return getShifts(date, fromDate, toDate, doctorId, serviceType, ShiftStatus.OPEN, room, facilityId).stream()
                 .filter(s -> s.getAvailableSlots() > 0)
                 .collect(Collectors.toList());
     }

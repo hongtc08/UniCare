@@ -233,12 +233,25 @@ public class AppointmentServiceImpl implements AppointmentService {
             throw new BadRequestException("Ca khám mới đã đầy chỗ (hết slot khả dụng)");
         }
 
-        // Kiểm tra ràng buộc sinh viên đã có lịch CONFIRMED trong ca mới hay chưa
+        // Kiểm tra ràng buộc sinh viên đã có lịch CONFIRMED trong ca mới hoặc trùng khung giờ trong ngày hay chưa
         Long studentId = appointment.getStudent().getId();
         boolean alreadyBookedInNewShift = appointmentRepository.existsByStudentIdAndShiftIdAndStatus(studentId,
                 newShift.getId(), STATUS_CONFIRMED);
         if (alreadyBookedInNewShift) {
             throw new DuplicateResourceException("Sinh viên đã có một lịch hẹn đã xác nhận trong ca khám mới này");
+        }
+
+        boolean overlappingInDay = appointmentRepository.existsOverlappingAppointmentExcludingId(
+                studentId,
+                appointment.getId(),
+                newShift.getShiftDate(),
+                newShift.getStartTime(),
+                newShift.getEndTime(),
+                STATUS_CONFIRMED
+        );
+        if (overlappingInDay) {
+            throw new DuplicateResourceException(
+                    "Sinh viên đã có lịch hẹn trùng khung giờ trong ngày " + newShift.getShiftDate());
         }
 
         // 1. Hoàn trả slot ca cũ

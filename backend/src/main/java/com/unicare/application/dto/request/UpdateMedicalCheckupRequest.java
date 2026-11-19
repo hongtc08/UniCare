@@ -23,6 +23,18 @@ public class UpdateMedicalCheckupRequest {
     @JsonAlias({"is_emergency", "laKhanCap", "emergency"})
     private Boolean isEmergency;
 
+    @JsonAlias({"emergency_level", "urgencyLevel", "urgency_level", "mucDoKhanCap", "severity", "level"})
+    private String emergencyLevel;
+
+    @JsonAlias({"emergency_type", "loaiCapCuu", "incidentType", "incident_type"})
+    private String emergencyType;
+
+    @JsonAlias({"reporter_contact", "reportedBy", "reported_by", "nguoiBaoCao", "contactInfo", "reporter"})
+    private String reporterContact;
+
+    @JsonAlias({"current_step", "workflowStep", "workflow_step", "step", "buocHienTai"})
+    private String currentStep;
+
     @JsonAlias({"periodic_result", "ketLuanDinhKy"})
     private String periodicResult;
 

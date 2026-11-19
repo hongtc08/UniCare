@@ -1,6 +1,7 @@
 package com.unicare.application.dto;
 
 import com.unicare.application.dto.request.ShiftRequest;
+import com.unicare.application.dto.response.FacilityResponse;
 import com.unicare.application.dto.response.ShiftResponse;
 import com.unicare.domain.entity.MedicalStaff;
 import com.unicare.domain.entity.Shift;
@@ -164,5 +165,20 @@ class ShiftDtoTest {
         assertThat(direct.getStaffCode()).isEqualTo("BS0006");
         assertThat(direct.getRoom()).isEqualTo("R2");
         assertThat(direct.getStatus()).isEqualTo(ShiftStatus.FULL);
+
+        direct.setFacilityId(2L);
+        direct.setFacilityName("Cơ sở 2");
+        assertThat(direct.getFacilityId()).isEqualTo(2L);
+        assertThat(direct.getFacilityName()).isEqualTo("Cơ sở 2");
+
+        FacilityResponse fac = new FacilityResponse();
+        fac.setId(1L);
+        fac.setName("Trung tâm Y tế Cơ sở Chính");
+        assertThat(fac.getId()).isEqualTo(1L);
+        assertThat(fac.getName()).isEqualTo("Trung tâm Y tế Cơ sở Chính");
+
+        FacilityResponse fac2 = new FacilityResponse(2L, "Cơ sở 2");
+        assertThat(fac2.getId()).isEqualTo(2L);
+        assertThat(fac2.getName()).isEqualTo("Cơ sở 2");
     }
 }

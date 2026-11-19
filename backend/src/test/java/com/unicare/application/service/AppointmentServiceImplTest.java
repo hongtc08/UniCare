@@ -675,4 +675,58 @@ class AppointmentServiceImplTest {
         assertThatThrownBy(() -> appointmentService.getAppointmentById(1L, "sv002"))
                 .isInstanceOf(AccessDeniedException.class);
     }
+
+    @Test
+    @DisplayName("Dời lịch hẹn: Chặn khi trùng khung giờ trong ngày (09:00-09:30 vs 09:15-09:45) và cho phép ca nối tiếp (09:30-10:00)")
+    void rescheduleAppointment_OverlappingTimeCheck_And_AdjacentAllowed() {
+        when(userRepository.findByUsername("sv001")).thenReturn(Optional.of(studentUser));
+        when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
+        when(shiftRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(currentShift));
+
+        // 1. Ca mới 09:15 - 09:45 bị trùng giờ với lịch hẹn 09:00 - 09:30 đã có của sinh viên
+        Shift overlappingShift = Shift.builder()
+                .id(103L)
+                .staff(currentShift.getStaff())
+                .shiftDate(futureDate)
+                .startTime(LocalTime.of(9, 15))
+                .endTime(LocalTime.of(9, 45))
+                .shiftType(ServiceType.KHAM_DA_KHOA)
+                .maxSlots(5)
+                .bookedSlots(1)
+                .status(ShiftStatus.OPEN)
+                .build();
+        when(shiftRepository.findByIdForUpdate(103L)).thenReturn(Optional.of(overlappingShift));
+        when(appointmentRepository.existsByStudentIdAndShiftIdAndStatus(10L, 103L, "CONFIRMED")).thenReturn(false);
+        when(appointmentRepository.existsOverlappingAppointmentExcludingId(
+                10L, 1L, futureDate, LocalTime.of(9, 15), LocalTime.of(9, 45), "CONFIRMED"
+        )).thenReturn(true);
+
+        RescheduleAppointmentRequest overlapReq = new RescheduleAppointmentRequest(103L, "Dời sang 09:15");
+        assertThatThrownBy(() -> appointmentService.rescheduleAppointment(1L, overlapReq, "sv001"))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("trùng khung giờ trong ngày");
+
+        // 2. Ca mới bắt đầu đúng 09:30 (09:30 - 10:00) ngay sau ca 09:00 - 09:30 -> HỢP LỆ
+        Shift adjacentShift = Shift.builder()
+                .id(104L)
+                .staff(currentShift.getStaff())
+                .shiftDate(futureDate)
+                .startTime(LocalTime.of(9, 30))
+                .endTime(LocalTime.of(10, 0))
+                .shiftType(ServiceType.KHAM_DA_KHOA)
+                .maxSlots(5)
+                .bookedSlots(1)
+                .status(ShiftStatus.OPEN)
+                .build();
+        when(shiftRepository.findByIdForUpdate(104L)).thenReturn(Optional.of(adjacentShift));
+        when(appointmentRepository.existsByStudentIdAndShiftIdAndStatus(10L, 104L, "CONFIRMED")).thenReturn(false);
+        when(appointmentRepository.existsOverlappingAppointmentExcludingId(
+                10L, 1L, futureDate, LocalTime.of(9, 30), LocalTime.of(10, 0), "CONFIRMED"
+        )).thenReturn(false);
+        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(i -> i.getArgument(0));
+
+        RescheduleAppointmentRequest adjacentReq = new RescheduleAppointmentRequest(104L, "Dời sang ca 09:30 nối tiếp");
+        AppointmentResponse response = appointmentService.rescheduleAppointment(1L, adjacentReq, "sv001");
+        assertThat(response.getShiftId()).isEqualTo(104L);
+    }
 }
