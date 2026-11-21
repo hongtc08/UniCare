@@ -23,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,10 +37,12 @@ import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -622,5 +625,107 @@ class MedicalCheckupControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(progressReq)))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("SP5-01 POST & PUT /api/medical-records: Hỗ trợ JSON alias cho Tư vấn tâm lý và Khám sức khỏe định kỳ")
+    void psychologicalAndPeriodicAliases_Success() throws Exception {
+        MedicalCheckupDetailResponse psychRes = MedicalCheckupDetailResponse.builder()
+                .id(11L)
+                .checkupCode("PK2611210011")
+                .checkupType("PSYCHOLOGICAL")
+                .checkupTypeLabel("Tư vấn tâm lý")
+                .timelineCategory("PSYCHOLOGICAL")
+                .isPeriodic(false)
+                .symptoms("Mất ngủ, lo âu trước kỳ thi")
+                .diagnosisNotes("Căng thẳng học đường mức nhẹ")
+                .treatmentSuggestions("Thực hành thở 4-7-8, nghỉ ngơi hợp lý")
+                .status("COMPLETED")
+                .completedAt(OffsetDateTime.now())
+                .prescribedMedicines(Collections.emptyList())
+                .build();
+
+        when(medicalCheckupService.createCheckup(any(CreateMedicalCheckupRequest.class), eq("bs001")))
+                .thenReturn(psychRes);
+
+        String psychPayload = """
+                {
+                  "appointmentId": 201,
+                  "loaiPhieu": "PSYCHOLOGICAL",
+                  "bieuHien": "Mất ngủ, lo âu trước kỳ thi",
+                  "tomTatTuVan": "Căng thẳng học đường mức nhẹ",
+                  "deXuatGiaiToa": "Thực hành thở 4-7-8, nghỉ ngơi hợp lý",
+                  "trangThai": "COMPLETED"
+                }
+                """;
+
+        mockMvc.perform(post("/api/medical-records")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(psychPayload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.checkupType").value("PSYCHOLOGICAL"))
+                .andExpect(jsonPath("$.data.checkupTypeLabel").value("Tư vấn tâm lý"))
+                .andExpect(jsonPath("$.data.timelineCategory").value("PSYCHOLOGICAL"))
+                .andExpect(jsonPath("$.data.symptoms").value("Mất ngủ, lo âu trước kỳ thi"))
+                .andExpect(jsonPath("$.data.diagnosisNotes").value("Căng thẳng học đường mức nhẹ"))
+                .andExpect(jsonPath("$.data.treatmentSuggestions").value("Thực hành thở 4-7-8, nghỉ ngơi hợp lý"));
+
+        ArgumentCaptor<CreateMedicalCheckupRequest> createCaptor = ArgumentCaptor.forClass(CreateMedicalCheckupRequest.class);
+        verify(medicalCheckupService).createCheckup(createCaptor.capture(), eq("bs001"));
+        assertThat(createCaptor.getValue().getCheckupType()).isEqualTo("PSYCHOLOGICAL");
+        assertThat(createCaptor.getValue().getSymptoms()).isEqualTo("Mất ngủ, lo âu trước kỳ thi");
+        assertThat(createCaptor.getValue().getDiagnosisNotes()).isEqualTo("Căng thẳng học đường mức nhẹ");
+        assertThat(createCaptor.getValue().getTreatmentSuggestions()).isEqualTo("Thực hành thở 4-7-8, nghỉ ngơi hợp lý");
+        assertThat(createCaptor.getValue().getStatus()).isEqualTo("COMPLETED");
+
+        MedicalCheckupDetailResponse periodicRes = MedicalCheckupDetailResponse.builder()
+                .id(12L)
+                .checkupCode("PK2611210012")
+                .checkupType("GENERAL")
+                .checkupTypeLabel("Khám sức khỏe định kỳ")
+                .timelineCategory("PERIODIC")
+                .isPeriodic(true)
+                .periodicResult("PASSED")
+                .periodicResultLabel("Đạt")
+                .symptoms("Khám tổng quát định kỳ")
+                .diagnosisNotes("Đủ điều kiện sức khỏe học tập")
+                .status("COMPLETED")
+                .completedAt(OffsetDateTime.now())
+                .prescribedMedicines(Collections.emptyList())
+                .build();
+
+        when(medicalCheckupService.updateCheckup(eq(12L), any(UpdateMedicalCheckupRequest.class), eq("bs001")))
+                .thenReturn(periodicRes);
+
+        String periodicPayload = """
+                {
+                  "isPeriodic": true,
+                  "ketLuanDinhKy": "PASSED",
+                  "trieuChung": "Khám tổng quát định kỳ",
+                  "chanDoan": "Đủ điều kiện sức khỏe học tập",
+                  "status": "COMPLETED"
+                }
+                """;
+
+        mockMvc.perform(put("/api/medical-records/12")
+                        .principal(mockPrincipal)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(periodicPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.isPeriodic").value(true))
+                .andExpect(jsonPath("$.data.periodicResult").value("PASSED"))
+                .andExpect(jsonPath("$.data.periodicResultLabel").value("Đạt"))
+                .andExpect(jsonPath("$.data.checkupTypeLabel").value("Khám sức khỏe định kỳ"))
+                .andExpect(jsonPath("$.data.timelineCategory").value("PERIODIC"));
+
+        ArgumentCaptor<UpdateMedicalCheckupRequest> updateCaptor = ArgumentCaptor.forClass(UpdateMedicalCheckupRequest.class);
+        verify(medicalCheckupService).updateCheckup(eq(12L), updateCaptor.capture(), eq("bs001"));
+        assertThat(updateCaptor.getValue().getIsPeriodic()).isTrue();
+        assertThat(updateCaptor.getValue().getPeriodicResult()).isEqualTo("PASSED");
+        assertThat(updateCaptor.getValue().getSymptoms()).isEqualTo("Khám tổng quát định kỳ");
+        assertThat(updateCaptor.getValue().getDiagnosisNotes()).isEqualTo("Đủ điều kiện sức khỏe học tập");
     }
 }

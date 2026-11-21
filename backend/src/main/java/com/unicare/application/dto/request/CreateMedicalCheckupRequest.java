@@ -43,16 +43,19 @@ public class CreateMedicalCheckupRequest {
     @JsonAlias({"checkup_type", "loaiPhieu", "type"})
     private String checkupType;
 
-    @JsonAlias({"periodic_result", "ketLuanDinhKy"})
+    @JsonAlias({"periodic_result", "ketLuanDinhKy", "ket_luan_dinh_ky", "ketQuaDinhKy", "ket_qua_dinh_ky", "periodicCheckupResult"})
     private String periodicResult;
 
-    @JsonAlias({"trieuChung", "reasonSymptoms"})
+    @JsonAlias({"is_periodic", "laKhamDinhKy", "la_kham_dinh_ky", "khamDinhKy", "periodic"})
+    private Boolean isPeriodic;
+
+    @JsonAlias({"trieuChung", "trieu_chung", "reasonSymptoms", "reason_symptoms", "bieuHien", "bieu_hien", "psychologicalSymptoms", "psychological_symptoms", "manifestations"})
     private String symptoms;
 
-    @JsonAlias({"diagnosis_notes", "chanDoan", "diagnosis"})
+    @JsonAlias({"diagnosis_notes", "chanDoan", "chan_doan", "diagnosis", "tomTatTuVan", "tom_tat_tu_van", "counselingSummary", "counseling_summary", "consultationSummary", "consultation_summary"})
     private String diagnosisNotes;
 
-    @JsonAlias({"treatment_suggestions", "bienPhapSoCuu", "firstAid", "deXuatGiaiToa"})
+    @JsonAlias({"treatment_suggestions", "bienPhapSoCuu", "bien_phap_so_cuu", "firstAid", "first_aid", "deXuatGiaiToa", "de_xuat_giai_toa", "deXuatGiaiTo", "reliefSuggestions", "relief_suggestions", "counselingRecommendations"})
     private String treatmentSuggestions;
 
     @JsonAlias({"disease_group_id", "nhomBenhId"})

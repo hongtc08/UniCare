@@ -252,8 +252,14 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
                     : CHECKUP_TYPE_GENERAL;
         }
 
-        DiseaseGroup diseaseGroup = resolveDiseaseGroup(request.getDiseaseGroupId());
+        DiseaseGroup diseaseGroup = (CHECKUP_TYPE_PSYCHOLOGICAL.equals(checkupType) && request.getDiseaseGroupId() == null)
+                ? null
+                : resolveDiseaseGroup(request.getDiseaseGroupId());
         String periodicResult = normalizePeriodicResult(request.getPeriodicResult());
+        if (Boolean.FALSE.equals(request.getIsPeriodic())) {
+            periodicResult = null;
+        }
+        boolean periodicRequired = isPeriodicRequired(request.getIsPeriodic(), request.getCheckupType(), periodicResult);
         String targetStatus = normalizeStatus(request.getStatus());
 
         String emergencyLevel = isEmergency ? normalizeEmergencyLevel(request.getEmergencyLevel()) : null;
@@ -289,7 +295,7 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
             if (isEmergency) {
                 checkup.setCurrentStep(STEP_KET_THUC);
             }
-            applyCompletion(checkup);
+            applyCompletion(checkup, periodicRequired);
         }
 
         MedicalCheckup savedCheckup = medicalCheckupRepository.save(checkup);
@@ -340,18 +346,27 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
         checkup.setSymptoms(trimToNull(request.getSymptoms()));
         checkup.setDiagnosisNotes(trimToNull(request.getDiagnosisNotes()));
         checkup.setTreatmentSuggestions(trimToNull(request.getTreatmentSuggestions()));
-        checkup.setDiseaseGroup(resolveDiseaseGroup(request.getDiseaseGroupId()));
+        if (CHECKUP_TYPE_PSYCHOLOGICAL.equals(checkup.getCheckupType()) && request.getDiseaseGroupId() == null) {
+            checkup.setDiseaseGroup(null);
+        } else {
+            checkup.setDiseaseGroup(resolveDiseaseGroup(request.getDiseaseGroupId()));
+        }
 
         if (request.getPeriodicResult() != null) {
             checkup.setPeriodicResult(normalizePeriodicResult(request.getPeriodicResult()));
         }
+        if (Boolean.FALSE.equals(request.getIsPeriodic())) {
+            checkup.setPeriodicResult(null);
+        }
 
+        boolean periodicRequired = isPeriodicRequired(
+                request.getIsPeriodic(), request.getCheckupType(), checkup.getPeriodicResult());
         String targetStatus = normalizeStatus(request.getStatus());
         if (STATUS_COMPLETED.equals(targetStatus) || STEP_KET_THUC.equals(checkup.getCurrentStep())) {
             if (Boolean.TRUE.equals(checkup.getIsEmergency()) && !STEP_CHUYEN_VIEN.equals(checkup.getCurrentStep())) {
                 checkup.setCurrentStep(STEP_KET_THUC);
             }
-            applyCompletion(checkup);
+            applyCompletion(checkup, periodicRequired);
         } else {
             checkup.setStatus(STATUS_DRAFT);
         }
@@ -755,7 +770,7 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
         }
 
         if (STEP_KET_THUC.equals(normalizedStep)) {
-            checkup.markCompleted(OffsetDateTime.now());
+            applyCompletion(checkup);
         }
 
         MedicalCheckup savedCheckup = medicalCheckupRepository.save(checkup);
@@ -803,7 +818,13 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
     }
 
     private void applyCompletion(MedicalCheckup checkup) {
-        validateRequiredFieldsForCompletion(checkup);
+        boolean periodicRequired = MedicalCheckupDetailResponse.isPeriodicCheckup(
+                checkup.getCheckupType(), checkup.getPeriodicResult());
+        applyCompletion(checkup, periodicRequired);
+    }
+
+    private void applyCompletion(MedicalCheckup checkup, boolean periodicRequired) {
+        validateRequiredFieldsForCompletion(checkup, periodicRequired);
 
         checkup.markCompleted(OffsetDateTime.now());
 
@@ -816,7 +837,12 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
         }
     }
 
-    private void validateRequiredFieldsForCompletion(MedicalCheckup checkup) {
+    private void validateRequiredFieldsForCompletion(MedicalCheckup checkup, boolean periodicRequired) {
+        if (periodicRequired && !isValidPeriodicResult(checkup.getPeriodicResult())) {
+            throw new BadRequestException(
+                    "Vui lòng chọn kết quả khám sức khỏe định kỳ (PASSED / FAILED) trước khi hoàn tất phiếu khám");
+        }
+
         String type = checkup.getCheckupType() != null ? checkup.getCheckupType() : CHECKUP_TYPE_GENERAL;
         if (CHECKUP_TYPE_PSYCHOLOGICAL.equalsIgnoreCase(type)) {
             if (checkup.getDiagnosisNotes() == null || checkup.getDiagnosisNotes().isBlank()) {
@@ -830,6 +856,35 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
                 throw new BadRequestException("Vui lòng nhập kết luận chẩn đoán (diagnosisNotes) trước khi hoàn tất phiếu khám");
             }
         }
+    }
+
+    private boolean isPeriodicRequired(Boolean isPeriodicFlag, String rawCheckupType, String periodicResult) {
+        if (Boolean.FALSE.equals(isPeriodicFlag)) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(isPeriodicFlag) || isPeriodicTypeAlias(rawCheckupType)) {
+            return true;
+        }
+        return periodicResult != null && !periodicResult.isBlank();
+    }
+
+    private boolean isValidPeriodicResult(String periodicResult) {
+        if (periodicResult == null || periodicResult.isBlank()) {
+            return false;
+        }
+        return PERIODIC_RESULT_PASSED.equalsIgnoreCase(periodicResult)
+                || PERIODIC_RESULT_FAILED.equalsIgnoreCase(periodicResult);
+    }
+
+    private boolean isPeriodicTypeAlias(String rawType) {
+        if (rawType == null || rawType.isBlank()) {
+            return false;
+        }
+        String upper = rawType.trim().toUpperCase(Locale.ROOT);
+        return "PERIODIC".equals(upper)
+                || "KHAM_DINH_KY".equals(upper)
+                || "DINH_KY".equals(upper)
+                || "KHAM_SUC_KHOE_DINH_KY".equals(upper);
     }
 
     private void validateDoctorRole(User currentUser, String actionText) {
@@ -895,11 +950,16 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
         if (rawType == null || rawType.isBlank()) {
             return CHECKUP_TYPE_GENERAL;
         }
-        String upper = rawType.trim().toUpperCase();
-        if (CHECKUP_TYPE_GENERAL.equals(upper) || "KHAM_DA_KHOA".equals(upper) || "DA_KHOA".equals(upper)) {
+        String upper = rawType.trim().toUpperCase(Locale.ROOT);
+        if (CHECKUP_TYPE_GENERAL.equals(upper)
+                || "KHAM_DA_KHOA".equals(upper)
+                || "DA_KHOA".equals(upper)
+                || isPeriodicTypeAlias(upper)) {
             return CHECKUP_TYPE_GENERAL;
         }
-        if (CHECKUP_TYPE_PSYCHOLOGICAL.equals(upper) || "TU_VAN_TAM_LY".equals(upper) || "TAM_LY".equals(upper)) {
+        if (CHECKUP_TYPE_PSYCHOLOGICAL.equals(upper)
+                || "TU_VAN_TAM_LY".equals(upper)
+                || "TAM_LY".equals(upper)) {
             return CHECKUP_TYPE_PSYCHOLOGICAL;
         }
         throw new BadRequestException("Loại phiếu khám không hợp lệ: " + rawType + ". Chỉ chấp nhận GENERAL hoặc PSYCHOLOGICAL");
@@ -909,11 +969,14 @@ public class MedicalCheckupServiceImpl implements MedicalCheckupService {
         if (rawPeriodicResult == null || rawPeriodicResult.isBlank()) {
             return null;
         }
-        String upper = rawPeriodicResult.trim().toUpperCase();
-        if (PERIODIC_RESULT_PASSED.equals(upper) || "DAT".equals(upper)) {
+        String upper = rawPeriodicResult.trim().toUpperCase(Locale.ROOT);
+        if ("NONE".equals(upper) || "NULL".equals(upper)) {
+            return null;
+        }
+        if (PERIODIC_RESULT_PASSED.equals(upper) || "DAT".equals(upper) || "PASS".equals(upper)) {
             return PERIODIC_RESULT_PASSED;
         }
-        if (PERIODIC_RESULT_FAILED.equals(upper) || "KHONG_DAT".equals(upper)) {
+        if (PERIODIC_RESULT_FAILED.equals(upper) || "KHONG_DAT".equals(upper) || "FAIL".equals(upper) || "NOT_PASSED".equals(upper)) {
             return PERIODIC_RESULT_FAILED;
         }
         throw new BadRequestException("Kết quả khám định kỳ không hợp lệ: " + rawPeriodicResult + ". Chỉ chấp nhận PASSED hoặc FAILED");
