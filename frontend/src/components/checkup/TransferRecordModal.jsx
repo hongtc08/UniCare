@@ -134,13 +134,10 @@ function TransferRecordModalContent({
               <div className="space-y-0.5 text-xs">
                 <p className="font-bold text-amber-900 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5" />
-                  Lưu ý quan trọng khi Xác nhận chuyển viện:
+                  Lưu ý khi xác nhận chuyển viện:
                 </p>
                 <p className="text-amber-800 leading-relaxed text-[11px]">
-                  Sau khi bấm <span className="font-bold">Xác nhận chuyển viện</span>, hồ sơ chuyển
-                  viện sẽ được <span className="font-bold underline">khóa chỉ đọc (Read-only)</span>{" "}
-                  và hệ thống sẽ <span className="font-bold">tự động kết thúc ca khám tại trường</span>.
-                  Bạn sẽ không thể chỉnh sửa lại hồ sơ sau khi xác nhận.
+                  Sau khi xác nhận, hồ sơ chuyển viện sẽ bị khóa và ca khám tại trường sẽ tự động kết thúc.
                 </p>
               </div>
             </div>
