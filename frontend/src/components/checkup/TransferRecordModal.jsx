@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Ambulance,
   AlertTriangle,
@@ -27,8 +27,12 @@ function toLocalDateTimeInputValue(date = new Date()) {
 /**
  * Modal Lập Hồ sơ Chuyển viện (BE3 - POST /api/medical-records/{id}/transfer).
  */
-export default function TransferRecordModal({
-  isOpen,
+export default function TransferRecordModal(props) {
+  if (!props.isOpen) return null;
+  return <TransferRecordModalContent {...props} />;
+}
+
+function TransferRecordModalContent({
   onClose,
   onSubmit,
   submitting = false,
@@ -36,33 +40,16 @@ export default function TransferRecordModal({
   initialValues = {},
   studentInfo = {},
 }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     targetHospital: "",
     reasonCategory: TRANSFER_REASON_CATEGORIES.CAP_CUU_NANG,
     transferReason: "",
-    currentCondition: "",
-    firstAidNotes: "",
+    currentCondition: initialValues.currentCondition || "",
+    firstAidNotes: initialValues.firstAidNotes || "",
     refusalNotes: "",
     transferredAt: toLocalDateTimeInputValue(),
-  });
+  }));
   const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (isOpen) {
-      setForm({
-        targetHospital: "",
-        reasonCategory: TRANSFER_REASON_CATEGORIES.CAP_CUU_NANG,
-        transferReason: "",
-        currentCondition: initialValues.currentCondition || "",
-        firstAidNotes: initialValues.firstAidNotes || "",
-        refusalNotes: "",
-        transferredAt: toLocalDateTimeInputValue(),
-      });
-      setErrors({});
-    }
-  }, [isOpen, initialValues.currentCondition, initialValues.firstAidNotes]);
-
-  if (!isOpen) return null;
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));

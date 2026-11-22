@@ -21,6 +21,7 @@ export default function TransferReferralPrintModal({ isOpen, onClose, checkupId 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const originalTitleRef = useRef(null);
 
   const restoreDocumentTitle = useCallback(() => {
@@ -39,29 +40,45 @@ export default function TransferReferralPrintModal({ isOpen, onClose, checkupId 
     };
   }, [isOpen, restoreDocumentTitle]);
 
-  const fetchPrintData = useCallback(async () => {
-    if (!checkupId) return;
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await medicalRecordApi.getTransferReferralPrint(checkupId);
-      setData(res);
-    } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Không thể tải dữ liệu Giấy giới thiệu chuyển viện."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [checkupId]);
-
   useEffect(() => {
-    if (isOpen && checkupId) {
-      fetchPrintData();
-    }
-  }, [isOpen, checkupId, fetchPrintData]);
+    if (!isOpen || !checkupId) return;
+    let active = true;
+
+    Promise.resolve()
+      .then(() => {
+        if (!active) return null;
+        setLoading(true);
+        setError(null);
+        return medicalRecordApi.getTransferReferralPrint(checkupId);
+      })
+      .then((res) => {
+        if (active && res) {
+          setData(res);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setError(
+            err?.response?.data?.message ||
+              err?.message ||
+              "Không thể tải dữ liệu Giấy giới thiệu chuyển viện."
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, checkupId, reloadKey]);
+
+  const fetchPrintData = () => {
+    setReloadKey((prev) => prev + 1);
+  };
 
   if (!isOpen) return null;
 
