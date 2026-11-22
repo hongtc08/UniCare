@@ -16,6 +16,7 @@ import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Chi tiết Phiếu khám bệnh kèm Đơn thuốc và Hồ sơ chuyển viện (nếu có).
@@ -30,6 +31,7 @@ public class MedicalCheckupDetailResponse {
     private Long id;
     private String checkupCode;
     private String checkupType;
+    private String checkupTypeLabel;
     private Boolean isEmergency;
     private String emergencyLevel;
     private String emergencyType;
@@ -37,6 +39,7 @@ public class MedicalCheckupDetailResponse {
     private String currentStep;
     private String currentStepLabel;
     private String periodicResult;
+    private String periodicResultLabel;
     private Boolean isPeriodic;
     private String timelineCategory;
 
@@ -108,6 +111,7 @@ public class MedicalCheckupDetailResponse {
                 .id(entity.getId())
                 .checkupCode(entity.getCheckupCode())
                 .checkupType(entity.getCheckupType())
+                .checkupTypeLabel(resolveCheckupTypeLabel(entity.getCheckupType(), periodic))
                 .isEmergency(entity.getIsEmergency())
                 .emergencyLevel(entity.getEmergencyLevel())
                 .emergencyType(entity.getEmergencyType())
@@ -115,6 +119,7 @@ public class MedicalCheckupDetailResponse {
                 .currentStep(resolvedStep)
                 .currentStepLabel(resolveStepLabel(resolvedStep))
                 .periodicResult(entity.getPeriodicResult())
+                .periodicResultLabel(resolvePeriodicResultLabel(entity.getPeriodicResult()))
                 .isPeriodic(periodic)
                 .timelineCategory(category)
                 .symptoms(entity.getSymptoms())
@@ -150,25 +155,60 @@ public class MedicalCheckupDetailResponse {
     }
 
     // Khám định kỳ trong schema gộp chung vào medical_checkups và đánh dấu qua periodic_result
-    private static boolean isPeriodicCheckup(String checkupType, String periodicResult) {
+    public static boolean isPeriodicCheckup(String checkupType, String periodicResult) {
         if (periodicResult != null && !periodicResult.isBlank()) {
             return true;
         }
-        return checkupType != null
-                && ("PERIODIC".equalsIgnoreCase(checkupType.trim()) || "KHAM_DINH_KY".equalsIgnoreCase(checkupType.trim()));
+        if (checkupType == null) {
+            return false;
+        }
+        String upper = checkupType.trim().toUpperCase(Locale.ROOT);
+        return "PERIODIC".equals(upper)
+                || "KHAM_DINH_KY".equals(upper)
+                || "DINH_KY".equals(upper)
+                || "KHAM_SUC_KHOE_DINH_KY".equals(upper);
     }
 
-    private static String resolveTimelineCategory(String checkupType, boolean periodic) {
+    public static String resolveTimelineCategory(String checkupType, boolean periodic) {
         if (periodic) {
             return "PERIODIC";
         }
-        if (checkupType != null) {
-            String upper = checkupType.trim().toUpperCase();
-            if ("PSYCHOLOGICAL".equals(upper) || "TU_VAN_TAM_LY".equals(upper) || "TAM_LY".equals(upper)) {
-                return "PSYCHOLOGICAL";
-            }
+        if (isPsychologicalType(checkupType)) {
+            return "PSYCHOLOGICAL";
         }
         return "GENERAL";
+    }
+
+    public static String resolveCheckupTypeLabel(String checkupType, boolean periodic) {
+        if (isPsychologicalType(checkupType)) {
+            return "Tư vấn tâm lý";
+        }
+        if (periodic) {
+            return "Khám sức khỏe định kỳ";
+        }
+        return "Khám đa khoa";
+    }
+
+    public static String resolvePeriodicResultLabel(String periodicResult) {
+        if (periodicResult == null || periodicResult.isBlank()) {
+            return null;
+        }
+        String upper = periodicResult.trim().toUpperCase(Locale.ROOT);
+        if ("PASSED".equals(upper) || "DAT".equals(upper) || "PASS".equals(upper)) {
+            return "Đạt";
+        }
+        if ("FAILED".equals(upper) || "KHONG_DAT".equals(upper) || "FAIL".equals(upper) || "NOT_PASSED".equals(upper)) {
+            return "Không đạt";
+        }
+        return null;
+    }
+
+    private static boolean isPsychologicalType(String checkupType) {
+        if (checkupType == null) {
+            return false;
+        }
+        String upper = checkupType.trim().toUpperCase(Locale.ROOT);
+        return "PSYCHOLOGICAL".equals(upper) || "TU_VAN_TAM_LY".equals(upper) || "TAM_LY".equals(upper);
     }
 
     public static String resolveEffectiveStep(MedicalCheckup entity) {

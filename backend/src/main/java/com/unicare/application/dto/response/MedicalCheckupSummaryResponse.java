@@ -17,6 +17,8 @@ public class MedicalCheckupSummaryResponse {
     private String checkupType;
     private Boolean isEmergency;
     private String periodicResult;
+    private Boolean isPeriodic;
+    private String timelineCategory;
     private String symptoms;
     private String diagnosisNotes;
     private String treatmentSuggestions;
@@ -45,7 +47,10 @@ public class MedicalCheckupSummaryResponse {
         response.setCheckupCode(entity.getCheckupCode());
         response.setCheckupType(entity.getCheckupType());
         response.setIsEmergency(entity.getIsEmergency());
+        boolean periodic = MedicalCheckupDetailResponse.isPeriodicCheckup(entity.getCheckupType(), entity.getPeriodicResult());
         response.setPeriodicResult(entity.getPeriodicResult());
+        response.setIsPeriodic(periodic);
+        response.setTimelineCategory(MedicalCheckupDetailResponse.resolveTimelineCategory(entity.getCheckupType(), periodic));
         response.setSymptoms(entity.getSymptoms());
         response.setDiagnosisNotes(entity.getDiagnosisNotes());
         response.setTreatmentSuggestions(entity.getTreatmentSuggestions());
@@ -117,6 +122,22 @@ public class MedicalCheckupSummaryResponse {
 
     public void setPeriodicResult(String periodicResult) {
         this.periodicResult = periodicResult;
+    }
+
+    public Boolean getIsPeriodic() {
+        return isPeriodic;
+    }
+
+    public void setIsPeriodic(Boolean isPeriodic) {
+        this.isPeriodic = isPeriodic;
+    }
+
+    public String getTimelineCategory() {
+        return timelineCategory;
+    }
+
+    public void setTimelineCategory(String timelineCategory) {
+        this.timelineCategory = timelineCategory;
     }
 
     public String getSymptoms() {

@@ -9,6 +9,7 @@ import com.unicare.application.dto.request.UpdatePrescriptionRequest;
 import com.unicare.application.dto.response.EmergencyCasePageResponse;
 import com.unicare.application.dto.response.EmergencyStatsResponse;
 import com.unicare.application.dto.response.MedicalCheckupDetailResponse;
+import com.unicare.application.dto.response.MedicalCheckupSummaryResponse;
 import com.unicare.application.dto.response.PrescribedMedicineResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
 import com.unicare.application.dto.response.TransferRecordResponse;
@@ -1683,5 +1684,353 @@ class MedicalCheckupServiceImplTest {
         assertThat(medicalCheckupService.getEmergencyCases(
                 null, null, null, null, null, LocalDate.now().minusDays(5), 0, 5, "bs001"
         ).getTotalElements()).isZero();
+    }
+
+    // =========================================================================
+    // 6. Tests for SP5-01: Psychological Checkup & Periodic Health Checkup
+    // =========================================================================
+
+    @Test
+    @DisplayName("SP5-01 Tư vấn tâm lý: Tạo nháp, cập nhật 3 trường chuyên môn, xóa nhóm bệnh dịch tễ và hoàn tất thành công")
+    void psychologicalCheckup_CreateDraftUpdateAndComplete_Success() {
+        Appointment psychAppt = Appointment.builder()
+                .id(201L)
+                .appointmentCode("LH2611210001")
+                .student(student)
+                .shift(psychologicalShift)
+                .reasonSymptoms("Căng thẳng, mất ngủ trước kỳ thi")
+                .status("CONFIRMED")
+                .build();
+
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(appointmentRepository.findByIdWithDetails(201L)).thenReturn(Optional.of(psychAppt));
+        when(medicalCheckupRepository.findByAppointmentIdWithDetails(201L)).thenReturn(Optional.empty());
+        when(medicalCheckupRepository.existsByCheckupCode(anyString())).thenReturn(false);
+        when(medicalCheckupRepository.save(any(MedicalCheckup.class))).thenAnswer(inv -> {
+            MedicalCheckup mc = inv.getArgument(0);
+            if (mc.getId() == null) {
+                mc.setId(701L);
+            }
+            return mc;
+        });
+
+        // 1. Tạo nháp từ lịch hẹn Tư vấn tâm lý (chỉ cần biểu hiện & đề xuất giải tỏa, chưa cần tóm tắt tư vấn)
+        CreateMedicalCheckupRequest createDraftReq = CreateMedicalCheckupRequest.builder()
+                .appointmentId(201L)
+                .checkupType("TU_VAN_TAM_LY")
+                .symptoms("Mất ngủ 2 tuần, lo âu, giảm tập trung")
+                .treatmentSuggestions("Hướng dẫn hít thở sâu 4-7-8")
+                .status("DRAFT")
+                .build();
+
+        MedicalCheckupDetailResponse draftRes = medicalCheckupService.createCheckup(createDraftReq, "bs001");
+        assertThat(draftRes.getId()).isEqualTo(701L);
+        assertThat(draftRes.getCheckupType()).isEqualTo("PSYCHOLOGICAL");
+        assertThat(draftRes.getCheckupTypeLabel()).isEqualTo("Tư vấn tâm lý");
+        assertThat(draftRes.getTimelineCategory()).isEqualTo("PSYCHOLOGICAL");
+        assertThat(draftRes.getIsPeriodic()).isFalse();
+        assertThat(draftRes.getPeriodicResultLabel()).isNull();
+        assertThat(draftRes.getDiseaseGroupId()).isNull();
+        assertThat(draftRes.getSymptoms()).isEqualTo("Mất ngủ 2 tuần, lo âu, giảm tập trung");
+        assertThat(draftRes.getTreatmentSuggestions()).isEqualTo("Hướng dẫn hít thở sâu 4-7-8");
+        assertThat(draftRes.getStatus()).isEqualTo("DRAFT");
+        assertThat(psychAppt.getStatus()).isEqualTo("CONFIRMED");
+
+        // 2. Cập nhật và hoàn tất qua PUT /api/medical-records/{id}
+        MedicalCheckup existingPsychEntity = MedicalCheckup.builder()
+                .id(701L)
+                .checkupCode(draftRes.getCheckupCode())
+                .student(student)
+                .staff(doctorStaff)
+                .appointment(psychAppt)
+                .checkupType("GENERAL")
+                .diseaseGroup(fluDiseaseGroup)
+                .isEmergency(false)
+                .status("DRAFT")
+                .createdAt(OffsetDateTime.now())
+                .build();
+        when(medicalCheckupRepository.findByIdWithDetails(701L)).thenReturn(Optional.of(existingPsychEntity));
+
+        UpdateMedicalCheckupRequest completeReq = UpdateMedicalCheckupRequest.builder()
+                .checkupType("PSYCHOLOGICAL")
+                .symptoms("Lo âu kéo dài, hay giật mình khi ngủ")
+                .diagnosisNotes("Áp lực học tập mức độ vừa, chưa có dấu hiệu trầm cảm nặng")
+                .treatmentSuggestions("Chia nhỏ thời gian ôn tập, tập thể dục 30 phút/ngày, hẹn tái tư vấn sau 2 tuần")
+                .status("COMPLETED")
+                .build();
+
+        MedicalCheckupDetailResponse completedRes = medicalCheckupService.updateCheckup(701L, completeReq, "bs001");
+        assertThat(completedRes.getStatus()).isEqualTo("COMPLETED");
+        assertThat(completedRes.getCheckupType()).isEqualTo("PSYCHOLOGICAL");
+        assertThat(completedRes.getCheckupTypeLabel()).isEqualTo("Tư vấn tâm lý");
+        assertThat(completedRes.getDiseaseGroupId()).isNull();
+        assertThat(completedRes.getSymptoms()).isEqualTo("Lo âu kéo dài, hay giật mình khi ngủ");
+        assertThat(completedRes.getDiagnosisNotes()).isEqualTo("Áp lực học tập mức độ vừa, chưa có dấu hiệu trầm cảm nặng");
+        assertThat(completedRes.getTreatmentSuggestions()).contains("hẹn tái tư vấn sau 2 tuần");
+        assertThat(completedRes.getCompletedAt()).isNotNull();
+        assertThat(psychAppt.getStatus()).isEqualTo("COMPLETED");
+        verify(appointmentRepository).save(psychAppt);
+    }
+
+    @Test
+    @DisplayName("SP5-01 Tư vấn tâm lý: Chặn hoàn tất (COMPLETED) khi thiếu Tóm tắt buổi tư vấn trên createCheckup, updateCheckup và completeCheckup")
+    void psychologicalCheckup_RequireDiagnosisNotesBeforeCompletion() {
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(studentRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(student));
+
+        // 1. Qua createCheckup
+        CreateMedicalCheckupRequest createWithoutSummary = CreateMedicalCheckupRequest.builder()
+                .studentId(10L)
+                .isEmergency(false)
+                .checkupType("PSYCHOLOGICAL")
+                .symptoms("Lo âu nhẹ")
+                .treatmentSuggestions("Nghe nhạc thư giãn")
+                .diagnosisNotes("   ")
+                .status("COMPLETED")
+                .build();
+
+        assertThatThrownBy(() -> medicalCheckupService.createCheckup(createWithoutSummary, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("tóm tắt buổi tư vấn");
+
+        // 2. Qua updateCheckup
+        MedicalCheckup draftPsych = MedicalCheckup.builder()
+                .id(702L)
+                .checkupCode("PK2611210702")
+                .student(student)
+                .staff(doctorStaff)
+                .checkupType("PSYCHOLOGICAL")
+                .isEmergency(false)
+                .symptoms("Mất ngủ")
+                .treatmentSuggestions("Thư giãn")
+                .status("DRAFT")
+                .createdAt(OffsetDateTime.now())
+                .build();
+        when(medicalCheckupRepository.findByIdWithDetails(702L)).thenReturn(Optional.of(draftPsych));
+
+        UpdateMedicalCheckupRequest updateWithoutSummary = UpdateMedicalCheckupRequest.builder()
+                .checkupType("PSYCHOLOGICAL")
+                .symptoms("Mất ngủ")
+                .diagnosisNotes(null)
+                .status("COMPLETED")
+                .build();
+
+        assertThatThrownBy(() -> medicalCheckupService.updateCheckup(702L, updateWithoutSummary, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("tóm tắt buổi tư vấn");
+
+        // 3. Qua completeCheckup
+        assertThatThrownBy(() -> medicalCheckupService.completeCheckup(702L, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("tóm tắt buổi tư vấn");
+
+        verify(medicalCheckupRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("SP5-01 Khám sức khỏe định kỳ: Hoàn tất với PASSED / FAILED (và alias DAT / KHONG_DAT, KHAM_DINH_KY) và ánh xạ SummaryResponse")
+    void periodicCheckup_PassedAndFailed_SuccessAndResponseMapping() {
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(studentRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(student));
+        when(medicalCheckupRepository.existsByCheckupCode(anyString())).thenReturn(false);
+        when(medicalCheckupRepository.save(any(MedicalCheckup.class))).thenAnswer(inv -> {
+            MedicalCheckup mc = inv.getArgument(0);
+            if (mc.getId() == null) {
+                mc.setId(703L);
+            }
+            return mc;
+        });
+
+        // 1. Tạo & hoàn tất Khám định kỳ với KHAM_DINH_KY + DAT -> chuẩn hóa về checkupType=GENERAL, periodicResult=PASSED
+        CreateMedicalCheckupRequest passedReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L)
+                .isEmergency(false)
+                .checkupType("KHAM_DINH_KY")
+                .isPeriodic(true)
+                .periodicResult("DAT")
+                .symptoms("Khám tổng quát đầu khóa: mạch 76 lần/phút, huyết áp 115/75 mmHg")
+                .diagnosisNotes("Thể lực tốt, đủ điều kiện học tập")
+                .status("COMPLETED")
+                .build();
+
+        MedicalCheckupDetailResponse passedRes = medicalCheckupService.createCheckup(passedReq, "bs001");
+        assertThat(passedRes.getCheckupType()).isEqualTo("GENERAL");
+        assertThat(passedRes.getCheckupTypeLabel()).isEqualTo("Khám sức khỏe định kỳ");
+        assertThat(passedRes.getPeriodicResult()).isEqualTo("PASSED");
+        assertThat(passedRes.getPeriodicResultLabel()).isEqualTo("Đạt");
+        assertThat(passedRes.getIsPeriodic()).isTrue();
+        assertThat(passedRes.getTimelineCategory()).isEqualTo("PERIODIC");
+        assertThat(passedRes.getStatus()).isEqualTo("COMPLETED");
+
+        // 2. Tạo nháp rồi cập nhật FAILED qua alias KHONG_DAT
+        CreateMedicalCheckupRequest draftPeriodicReq = CreateMedicalCheckupRequest.builder()
+                .studentId(10L)
+                .isEmergency(false)
+                .checkupType("PERIODIC")
+                .isPeriodic(true)
+                .symptoms("Huyết áp cao 155/95 mmHg")
+                .status("DRAFT")
+                .build();
+
+        MedicalCheckupDetailResponse draftRes = medicalCheckupService.createCheckup(draftPeriodicReq, "bs001");
+        assertThat(draftRes.getCheckupType()).isEqualTo("GENERAL");
+        assertThat(draftRes.getPeriodicResult()).isNull();
+        assertThat(draftRes.getStatus()).isEqualTo("DRAFT");
+
+        MedicalCheckup draftPeriodicEntity = MedicalCheckup.builder()
+                .id(704L)
+                .checkupCode("PK2611210704")
+                .student(student)
+                .staff(doctorStaff)
+                .checkupType("GENERAL")
+                .isEmergency(false)
+                .status("DRAFT")
+                .createdAt(OffsetDateTime.now())
+                .build();
+        when(medicalCheckupRepository.findByIdWithDetails(704L)).thenReturn(Optional.of(draftPeriodicEntity));
+
+        UpdateMedicalCheckupRequest failedUpdateReq = UpdateMedicalCheckupRequest.builder()
+                .isPeriodic(true)
+                .periodicResult("KHONG_DAT")
+                .symptoms("Huyết áp 155/95 mmHg, nhịp tim nhanh")
+                .diagnosisNotes("Không đạt tiêu chuẩn sức khỏe định kỳ, cần khám chuyên khoa tim mạch")
+                .status("COMPLETED")
+                .build();
+
+        MedicalCheckupDetailResponse failedRes = medicalCheckupService.updateCheckup(704L, failedUpdateReq, "bs001");
+        assertThat(failedRes.getPeriodicResult()).isEqualTo("FAILED");
+        assertThat(failedRes.getPeriodicResultLabel()).isEqualTo("Không đạt");
+        assertThat(failedRes.getIsPeriodic()).isTrue();
+        assertThat(failedRes.getTimelineCategory()).isEqualTo("PERIODIC");
+        assertThat(failedRes.getCheckupTypeLabel()).isEqualTo("Khám sức khỏe định kỳ");
+
+        // 3. Kiểm tra MedicalCheckupSummaryResponse đồng nhất isPeriodic & timelineCategory
+        MedicalCheckupSummaryResponse summary = MedicalCheckupSummaryResponse.fromEntity(draftPeriodicEntity);
+        assertThat(summary.getPeriodicResult()).isEqualTo("FAILED");
+        assertThat(summary.getIsPeriodic()).isTrue();
+        assertThat(summary.getTimelineCategory()).isEqualTo("PERIODIC");
+        assertThat(MedicalCheckupDetailResponse.resolveCheckupTypeLabel("GENERAL", false)).isEqualTo("Khám đa khoa");
+        assertThat(MedicalCheckupDetailResponse.resolvePeriodicResultLabel("UNKNOWN")).isNull();
+    }
+
+    @Test
+    @DisplayName("SP5-01 Khám sức khỏe định kỳ: Chặn hoàn tất nếu bật cờ định kỳ nhưng thiếu periodicResult, triệu chứng hoặc kết luận")
+    void periodicCheckup_RequirePeriodicResultSymptomsAndDiagnosisBeforeCompletion() {
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(studentRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(student));
+
+        // 1. isPeriodic = true nhưng periodicResult = null khi tạo COMPLETED
+        CreateMedicalCheckupRequest missingPeriodicResultCreate = CreateMedicalCheckupRequest.builder()
+                .studentId(10L)
+                .isEmergency(false)
+                .isPeriodic(true)
+                .symptoms("Khám định kỳ")
+                .diagnosisNotes("Đủ điều kiện")
+                .status("COMPLETED")
+                .build();
+
+        assertThatThrownBy(() -> medicalCheckupService.createCheckup(missingPeriodicResultCreate, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("kết quả khám sức khỏe định kỳ (PASSED / FAILED)");
+
+        // 2. checkupType = PERIODIC nhưng periodicResult = null khi update COMPLETED
+        MedicalCheckup draftGeneral = MedicalCheckup.builder()
+                .id(705L)
+                .checkupCode("PK2611210705")
+                .student(student)
+                .staff(doctorStaff)
+                .checkupType("GENERAL")
+                .isEmergency(false)
+                .status("DRAFT")
+                .createdAt(OffsetDateTime.now())
+                .build();
+        when(medicalCheckupRepository.findByIdWithDetails(705L)).thenReturn(Optional.of(draftGeneral));
+
+        UpdateMedicalCheckupRequest missingPeriodicResultUpdate = UpdateMedicalCheckupRequest.builder()
+                .checkupType("PERIODIC")
+                .symptoms("Khám định kỳ")
+                .diagnosisNotes("Sức khỏe bình thường")
+                .status("COMPLETED")
+                .build();
+
+        assertThatThrownBy(() -> medicalCheckupService.updateCheckup(705L, missingPeriodicResultUpdate, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("kết quả khám sức khỏe định kỳ (PASSED / FAILED)");
+
+        // 3. Có periodicResult = PASSED nhưng thiếu symptoms -> chặn
+        UpdateMedicalCheckupRequest missingSymptomsUpdate = UpdateMedicalCheckupRequest.builder()
+                .isPeriodic(true)
+                .periodicResult("PASSED")
+                .symptoms("   ")
+                .diagnosisNotes("Sức khỏe loại 1")
+                .status("COMPLETED")
+                .build();
+
+        assertThatThrownBy(() -> medicalCheckupService.updateCheckup(705L, missingSymptomsUpdate, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("triệu chứng (symptoms)");
+
+        // 4. Có periodicResult = FAILED và symptoms nhưng thiếu diagnosisNotes -> chặn
+        UpdateMedicalCheckupRequest missingDiagnosisUpdate = UpdateMedicalCheckupRequest.builder()
+                .isPeriodic(true)
+                .periodicResult("FAILED")
+                .symptoms("Thị lực giảm")
+                .diagnosisNotes("")
+                .status("COMPLETED")
+                .build();
+
+        assertThatThrownBy(() -> medicalCheckupService.updateCheckup(705L, missingDiagnosisUpdate, "bs001"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("kết luận chẩn đoán (diagnosisNotes)");
+    }
+
+    @Test
+    @DisplayName("SP5-01 Khám sức khỏe định kỳ: Cho phép xóa cờ periodicResult khi cập nhật phiếu nháp với isPeriodic = false hoặc periodicResult rỗng/NONE")
+    void periodicCheckup_ClearPeriodicResultOnDraftUpdate() {
+        when(userRepository.findByUsername("bs001")).thenReturn(Optional.of(doctorUser));
+        when(medicalCheckupRepository.save(any(MedicalCheckup.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MedicalCheckup draftWithPeriodic = MedicalCheckup.builder()
+                .id(706L)
+                .checkupCode("PK2611210706")
+                .student(student)
+                .staff(doctorStaff)
+                .checkupType("GENERAL")
+                .periodicResult("PASSED")
+                .isEmergency(false)
+                .symptoms("Khám sức khỏe")
+                .status("DRAFT")
+                .createdAt(OffsetDateTime.now())
+                .build();
+        when(medicalCheckupRepository.findByIdWithDetails(706L)).thenReturn(Optional.of(draftWithPeriodic));
+
+        // 1. Tắt cờ isPeriodic = false -> xóa periodicResult
+        UpdateMedicalCheckupRequest turnOffPeriodicReq = UpdateMedicalCheckupRequest.builder()
+                .isPeriodic(false)
+                .symptoms("Đau họng")
+                .status("DRAFT")
+                .build();
+
+        MedicalCheckupDetailResponse afterTurnOff = medicalCheckupService.updateCheckup(706L, turnOffPeriodicReq, "bs001");
+        assertThat(afterTurnOff.getPeriodicResult()).isNull();
+        assertThat(afterTurnOff.getIsPeriodic()).isFalse();
+        assertThat(afterTurnOff.getTimelineCategory()).isEqualTo("GENERAL");
+
+        // 2. Gán lại PASSED rồi xóa bằng periodicResult = "" và "NONE"
+        draftWithPeriodic.setPeriodicResult("PASSED");
+        UpdateMedicalCheckupRequest emptyPeriodicReq = UpdateMedicalCheckupRequest.builder()
+                .periodicResult("")
+                .symptoms("Đau họng")
+                .status("DRAFT")
+                .build();
+        assertThat(medicalCheckupService.updateCheckup(706L, emptyPeriodicReq, "bs001").getPeriodicResult()).isNull();
+
+        draftWithPeriodic.setPeriodicResult("FAILED");
+        UpdateMedicalCheckupRequest nonePeriodicReq = UpdateMedicalCheckupRequest.builder()
+                .periodicResult("NONE")
+                .symptoms("Đau họng")
+                .status("DRAFT")
+                .build();
+        assertThat(medicalCheckupService.updateCheckup(706L, nonePeriodicReq, "bs001").getPeriodicResult()).isNull();
     }
 }
