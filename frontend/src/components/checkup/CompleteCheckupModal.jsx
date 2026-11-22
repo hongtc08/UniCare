@@ -57,17 +57,13 @@ export default function CompleteCheckupModal({
 
         {/* BODY */}
         <div className="p-5 space-y-4 text-xs text-slate-600">
-          {/* CẢNH BÁO BẢN QUYỀN / READ-ONLY */}
+          {/* CẢNH BÁO */}
           <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <p className="font-bold text-amber-900">
-                Cảnh báo Khóa Chỉ đọc (Read-only):
-              </p>
+              <p className="font-bold text-amber-900">Lưu ý trước khi hoàn tất:</p>
               <p className="text-amber-800 leading-relaxed text-[11px]">
-                Sau khi hoàn tất, toàn bộ kết luận chẩn đoán, triệu chứng và đơn thuốc đi kèm sẽ bị
-                <span className="font-bold underline ml-1 mr-1">khóa cứng vĩnh viễn</span>
-                theo quy định lưu trữ bệnh án y tế. Bạn sẽ không thể chỉnh sửa hay xóa phiếu khám này.
+                Sau khi hoàn tất, phiếu khám và đơn thuốc sẽ không thể chỉnh sửa hoặc xóa.
               </p>
             </div>
           </div>
