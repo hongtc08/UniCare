@@ -7,15 +7,24 @@ import {
   AlertCircle,
   Save,
   CheckCircle2,
+  Ambulance,
+  Printer,
+  Building2,
 } from "lucide-react";
-import { medicalRecordApi } from "../../api/medicalRecordApi";
+import { medicalRecordApi, CHECKUP_TYPES } from "../../api/medicalRecordApi";
 import Toast from "../../components/common/Toast";
 import GeneralCheckupForm from "../../components/checkup/GeneralCheckupForm";
 import PatientOverviewWrapper from "../../components/checkup/PatientOverviewWrapper";
 import PrescriptionTable from "../../components/checkup/PrescriptionTable";
 import CompleteCheckupModal from "../../components/checkup/CompleteCheckupModal";
+import TransferRecordModal from "../../components/checkup/TransferRecordModal";
+import TransferReferralPrintModal from "../../components/checkup/TransferReferralPrintModal";
 import { createEmptyMedicine, validateAndCleanMedicines } from "../../utils/prescription";
-import { validateCheckupForm } from "../../utils/checkupValidation";
+import {
+  validateCheckupForm,
+  isPsychologicalCheckup,
+  normalizeCheckupType,
+} from "../../utils/checkupValidation";
 
 export default function GeneralExaminationPage() {
   const { id: pathId } = useParams();
@@ -44,10 +53,16 @@ export default function GeneralExaminationPage() {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
+  const [transferApiError, setTransferApiError] = useState(null);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
 
   // Form state lâm sàng (Khớp với Create/UpdateMedicalCheckupRequest DTO)
   const [formData, setFormData] = useState({
-    checkupType: "KHAM_DA_KHOA",
+    checkupType: CHECKUP_TYPES.GENERAL,
+    isPeriodic: false,
+    periodicResult: null,
     isEmergency: isEmergencyParam,
     diseaseGroupId: null,
     symptoms: "",
@@ -70,15 +85,46 @@ export default function GeneralExaminationPage() {
   // Cập nhật từng trường của Form khám lâm sàng
   const handleFormChange = (field, value) => {
     if (isReadOnly) return;
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setFormData((prev) => {
+      if (field === "checkupType") {
+        const normalizedType = normalizeCheckupType(value);
+        if (normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL) {
+          return {
+            ...prev,
+            checkupType: CHECKUP_TYPES.PSYCHOLOGICAL,
+            isPeriodic: false,
+            periodicResult: null,
+            diseaseGroupId: null,
+          };
+        }
+        return {
+          ...prev,
+          checkupType: CHECKUP_TYPES.GENERAL,
+        };
+      }
 
-    if (errors[field]) {
+      if (field === "isPeriodic") {
+        const enabled = Boolean(value);
+        return {
+          ...prev,
+          isPeriodic: enabled,
+          periodicResult: enabled ? prev.periodicResult : null,
+        };
+      }
+
+      return {
+        ...prev,
+        [field]: value,
+      };
+    });
+
+    if (errors[field] || (field === "checkupType" || field === "isPeriodic")) {
       setErrors((prev) => {
         const next = { ...prev };
         delete next[field];
+        if (field === "checkupType" || field === "isPeriodic") {
+          delete next.periodicResult;
+        }
         return next;
       });
     }
@@ -114,11 +160,17 @@ export default function GeneralExaminationPage() {
         if (pathId) {
           const detail = await medicalRecordApi.getCheckupDetail(pathId);
           if (active && detail) {
+            const normalizedType = normalizeCheckupType(detail.checkupType);
+            const periodicFlag =
+              normalizedType !== CHECKUP_TYPES.PSYCHOLOGICAL &&
+              Boolean(detail.isPeriodic || detail.periodicResult);
             setCheckupId(detail.id);
             setCheckupDetail(detail);
             setStatus(detail.status || "DRAFT");
             setFormData({
-              checkupType: detail.checkupType || "KHAM_DA_KHOA",
+              checkupType: normalizedType,
+              isPeriodic: periodicFlag,
+              periodicResult: periodicFlag ? detail.periodicResult || null : null,
               isEmergency: Boolean(detail.isEmergency),
               diseaseGroupId: detail.diseaseGroupId ? Number(detail.diseaseGroupId) : null,
               symptoms: detail.symptoms || "",
@@ -139,11 +191,17 @@ export default function GeneralExaminationPage() {
           try {
             const existing = await medicalRecordApi.getCheckupByAppointment(appointmentId);
             if (active && existing) {
+              const normalizedType = normalizeCheckupType(existing.checkupType);
+              const periodicFlag =
+                normalizedType !== CHECKUP_TYPES.PSYCHOLOGICAL &&
+                Boolean(existing.isPeriodic || existing.periodicResult);
               setCheckupId(existing.id);
               setCheckupDetail(existing);
               setStatus(existing.status || "DRAFT");
               setFormData({
-                checkupType: existing.checkupType || "KHAM_DA_KHOA",
+                checkupType: normalizedType,
+                isPeriodic: periodicFlag,
+                periodicResult: periodicFlag ? existing.periodicResult || null : null,
                 isEmergency: Boolean(existing.isEmergency),
                 diseaseGroupId: existing.diseaseGroupId ? Number(existing.diseaseGroupId) : null,
                 symptoms: existing.symptoms || "",
@@ -175,13 +233,15 @@ export default function GeneralExaminationPage() {
             const appt = await medicalRecordApi.getAppointmentById(appointmentId);
             if (active && appt) {
               setAppointmentData(appt);
+              const isPsyShift = appt.shiftType === "TU_VAN_TAM_LY";
               setFormData((prev) => ({
                 ...prev,
                 symptoms: prev.symptoms || appt.reasonSymptoms || "",
-                checkupType:
-                  appt.shiftType === "TU_VAN_TAM_LY"
-                    ? "TU_VAN_TAM_LY"
-                    : "KHAM_DA_KHOA",
+                checkupType: isPsyShift
+                  ? CHECKUP_TYPES.PSYCHOLOGICAL
+                  : CHECKUP_TYPES.GENERAL,
+                isPeriodic: isPsyShift ? false : prev.isPeriodic,
+                periodicResult: isPsyShift ? null : prev.periodicResult,
                 isEmergency: false,
               }));
             }
@@ -250,12 +310,22 @@ export default function GeneralExaminationPage() {
       setIsSavingDraft(true);
       setError(null);
 
+      const normalizedType = normalizeCheckupType(formData.checkupType);
+      const isPsy = normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL;
+      const isPeriodicFlag = !isPsy && Boolean(formData.isPeriodic);
+
       const payload = {
         appointmentId: appointmentId ? Number(appointmentId) : undefined,
         studentId: effectiveStudentId || undefined,
         isEmergency: Boolean(formData.isEmergency),
-        checkupType: formData.checkupType || "KHAM_DA_KHOA",
-        diseaseGroupId: formData.diseaseGroupId ? Number(formData.diseaseGroupId) : null,
+        checkupType: normalizedType,
+        isPeriodic: isPeriodicFlag,
+        periodicResult: isPeriodicFlag ? formData.periodicResult || null : null,
+        diseaseGroupId: isPsy
+          ? null
+          : formData.diseaseGroupId
+          ? Number(formData.diseaseGroupId)
+          : null,
         symptoms: formData.symptoms?.trim() || null,
         treatmentSuggestions: formData.treatmentSuggestions?.trim() || null,
         diagnosisNotes: formData.diagnosisNotes?.trim() || null,
@@ -330,12 +400,22 @@ export default function GeneralExaminationPage() {
       setIsCompleting(true);
       setError(null);
 
+      const normalizedType = normalizeCheckupType(formData.checkupType);
+      const isPsy = normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL;
+      const isPeriodicFlag = !isPsy && Boolean(formData.isPeriodic);
+
       const checkupPayload = {
         appointmentId: appointmentId ? Number(appointmentId) : undefined,
         studentId: effectiveStudentId || undefined,
         isEmergency: Boolean(formData.isEmergency),
-        checkupType: formData.checkupType || "KHAM_DA_KHOA",
-        diseaseGroupId: formData.diseaseGroupId ? Number(formData.diseaseGroupId) : null,
+        checkupType: normalizedType,
+        isPeriodic: isPeriodicFlag,
+        periodicResult: isPeriodicFlag ? formData.periodicResult || null : null,
+        diseaseGroupId: isPsy
+          ? null
+          : formData.diseaseGroupId
+          ? Number(formData.diseaseGroupId)
+          : null,
         symptoms: formData.symptoms?.trim() || null,
         treatmentSuggestions: formData.treatmentSuggestions?.trim() || null,
         diagnosisNotes: formData.diagnosisNotes?.trim() || null,
@@ -355,8 +435,11 @@ export default function GeneralExaminationPage() {
       // BƯỚC B: Lưu đơn thuốc (khi phiếu vẫn đang là DRAFT)
       await medicalRecordApi.updatePrescriptions(targetId, presResult.cleanedMedicines);
 
-      // BƯỚC C: Chốt trạng thái COMPLETED, khóa cứng Read-only
-      const completed = await medicalRecordApi.completeCheckup(targetId);
+      // BƯỚC C: Chốt trạng thái COMPLETED qua PUT kèm đầy đủ payload (isPeriodic, periodicResult)
+      const completed = await medicalRecordApi.updateCheckup(targetId, {
+        ...checkupPayload,
+        status: "COMPLETED",
+      });
 
       // Cập nhật giao diện sang chế độ Chỉ đọc ngay lập tức
       setCheckupId(targetId);
@@ -382,14 +465,115 @@ export default function GeneralExaminationPage() {
     }
   };
 
+  // LUỒNG 4: LẬP HỒ SƠ CHUYỂN VIỆN (Tự động lưu nháp nếu chưa có checkupId, sau đó POST /transfer)
+  const handleOpenTransferModal = () => {
+    if (isReadOnly || isSavingDraft || isCompleting || isSubmittingTransfer) return;
+    setTransferApiError(null);
+    setTransferModalOpen(true);
+  };
+
+  const handleConfirmTransfer = async (transferPayload) => {
+    try {
+      setIsSubmittingTransfer(true);
+      setTransferApiError(null);
+      setError(null);
+
+      let targetId = checkupId;
+      if (!targetId) {
+        const normalizedType = normalizeCheckupType(formData.checkupType);
+        const isPsy = normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL;
+        const isPeriodicFlag = !isPsy && Boolean(formData.isPeriodic);
+
+        const draftPayload = {
+          appointmentId: appointmentId ? Number(appointmentId) : undefined,
+          studentId: effectiveStudentId || undefined,
+          isEmergency: Boolean(formData.isEmergency),
+          checkupType: normalizedType,
+          isPeriodic: isPeriodicFlag,
+          periodicResult: isPeriodicFlag ? formData.periodicResult || null : null,
+          diseaseGroupId: isPsy
+            ? null
+            : formData.diseaseGroupId
+            ? Number(formData.diseaseGroupId)
+            : null,
+          symptoms: formData.symptoms?.trim() || null,
+          treatmentSuggestions: formData.treatmentSuggestions?.trim() || null,
+          diagnosisNotes: formData.diagnosisNotes?.trim() || null,
+          status: "DRAFT",
+        };
+
+        const created = await medicalRecordApi.createCheckup(draftPayload);
+        targetId = created.id;
+        setCheckupId(targetId);
+
+        const presResult = validateAndCleanMedicines(medicines);
+        if (presResult.isValid && presResult.cleanedMedicines.length > 0) {
+          await medicalRecordApi.updatePrescriptions(targetId, presResult.cleanedMedicines);
+        }
+      }
+
+      const transferred = await medicalRecordApi.createTransferRecord(targetId, transferPayload);
+
+      setCheckupId(targetId);
+      setCheckupDetail(transferred);
+      setStatus(transferred.status || "COMPLETED");
+      setFormData((prev) => ({
+        ...prev,
+        symptoms: transferred.symptoms || prev.symptoms,
+        diagnosisNotes: transferred.diagnosisNotes || prev.diagnosisNotes,
+        treatmentSuggestions: transferred.treatmentSuggestions || prev.treatmentSuggestions,
+      }));
+      setMedicines(
+        transferred.prescribedMedicines && transferred.prescribedMedicines.length > 0
+          ? transferred.prescribedMedicines.map((m) => createEmptyMedicine(m))
+          : []
+      );
+      setTransferModalOpen(false);
+      showToast(
+        "Lập hồ sơ chuyển viện thành công! Ca khám tại trường đã được tự động kết thúc và khóa chỉ đọc.",
+        "success"
+      );
+      navigate(`/doctor/checkups/${targetId}`, { replace: true });
+      setPrintModalOpen(true);
+    } catch (err) {
+      console.error("Lỗi khi lập hồ sơ chuyển viện:", err);
+      const msg =
+        err?.response?.data?.message || err?.message || "Không thể lập hồ sơ chuyển viện.";
+      setTransferApiError(msg);
+      showToast(msg, "error");
+    } finally {
+      setIsSubmittingTransfer(false);
+    }
+  };
+
+  const transferRecord = checkupDetail?.transferRecord || null;
+  const hasTransferRecord = Boolean(transferRecord);
+
+  const getTransferReasonLabel = (category) => {
+    switch (category) {
+      case "QUA_TAI":
+        return "Quá tải";
+      case "THIEU_THIET_BI":
+        return "Thiếu thiết bị / thuốc chuyên khoa";
+      case "CAP_CUU_NANG":
+        return "Cấp cứu nặng vượt khả năng chuyên môn";
+      default:
+        return category || "—";
+    }
+  };
+
+  const isPsychologicalMode = isPsychologicalCheckup(formData.checkupType);
+  const isPeriodicMode = !isPsychologicalMode && Boolean(formData.isPeriodic);
+  const checkupModeTitle = isPsychologicalMode
+    ? "Phiếu Tư Vấn Tâm Lý"
+    : isPeriodicMode
+    ? "Phiếu Khám Sức Khỏe Định Kỳ"
+    : "Phiếu Khám Đa Khoa";
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Toast thông báo */}
-      {toast && (
-        <div className="fixed top-5 right-5 z-50">
-          <Toast message={toast.message} type={toast.type} />
-        </div>
-      )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* HEADER & THANH ĐIỀU HƯỚNG */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
@@ -403,13 +587,13 @@ export default function GeneralExaminationPage() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-slate-800">
                 {isReadOnly
-                  ? "Phiếu Khám Đa Khoa (Chế độ Chỉ đọc)"
+                  ? `${checkupModeTitle} (Chế độ Chỉ đọc)`
                   : checkupId
-                  ? "Phiếu Khám Đa Khoa & Kê Đơn Thuốc"
-                  : "Lập Phiếu Khám Đa Khoa Mới"}
+                  ? `${checkupModeTitle} & Kê Đơn Thuốc`
+                  : `Lập ${checkupModeTitle} Mới`}
               </h1>
               {isReadOnly ? (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
@@ -442,13 +626,25 @@ export default function GeneralExaminationPage() {
         </div>
 
         {/* CỤM NÚT THAO TÁC ĐẦU TRANG */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {!isReadOnly && !hasTransferRecord && (
+            <button
+              type="button"
+              onClick={handleOpenTransferModal}
+              disabled={loading || isSavingDraft || isCompleting || isSubmittingTransfer}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors shadow-xs"
+            >
+              <Ambulance className="w-4 h-4 text-red-600" />
+              <span>Chuyển viện</span>
+            </button>
+          )}
+
           {!isReadOnly && (
             <>
               <button
                 type="button"
                 onClick={handleSaveDraft}
-                disabled={loading || isSavingDraft || isCompleting}
+                disabled={loading || isSavingDraft || isCompleting || isSubmittingTransfer}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 active:bg-slate-100 disabled:opacity-50 transition-colors shadow-xs"
               >
                 {isSavingDraft ? (
@@ -467,7 +663,7 @@ export default function GeneralExaminationPage() {
               <button
                 type="button"
                 onClick={handleOpenCompleteModal}
-                disabled={loading || isSavingDraft || isCompleting}
+                disabled={loading || isSavingDraft || isCompleting || isSubmittingTransfer}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 rounded-lg transition-colors shadow-xs"
               >
                 {isCompleting ? (
@@ -498,18 +694,6 @@ export default function GeneralExaminationPage() {
         </div>
       )}
 
-      {/* BANNER CHỈ ĐỌC KHI PHIẾU ĐÃ COMPLETED */}
-      {isReadOnly && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3 text-emerald-800 text-xs">
-          <Lock className="w-4 h-4 shrink-0 text-emerald-600" />
-          <div>
-            <span className="font-bold">Chế độ Chỉ đọc vĩnh viễn:</span> Phiếu
-            khám này đã được hoàn tất ca khám. Toàn bộ thông tin chẩn đoán, biện
-            pháp sơ cứu và đơn thuốc đã được khóa cứng và không thể chỉnh sửa hay xóa.
-          </div>
-        </div>
-      )}
-
       {/* NỘI DUNG CHÍNH: BỐ CỤC 2 CỘT */}
       {loading ? (
         <div className="py-20 text-center text-slate-500 text-sm flex flex-col items-center justify-center gap-3">
@@ -528,6 +712,75 @@ export default function GeneralExaminationPage() {
 
           {/* CỘT PHẢI (8 cols): FORM PHIẾU KHÁM & BẢNG KÊ ĐƠN THUỐC */}
           <div className="lg:col-span-8 space-y-6">
+            {/* THẺ TÓM TẮT HỒ SƠ CHUYỂN VIỆN (READ-ONLY) KHI ĐÃ CÓ CHUYỂN VIỆN */}
+            {hasTransferRecord && (
+              <div className="bg-white rounded-xl border border-red-200/90 shadow-xs overflow-hidden">
+                <div className="px-5 py-3.5 bg-red-50/60 border-b border-red-100 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-red-100 text-red-600 rounded-lg">
+                      <Ambulance className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        Hồ sơ Chuyển viện Tuyến trên
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-800 border border-red-200">
+                          <Lock className="w-3 h-3" />
+                          Chỉ đọc
+                        </span>
+                      </h2>
+                      <p className="text-[11px] text-slate-500">
+                        Mã hồ sơ: <span className="font-bold text-slate-700">{transferRecord.recordCode}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrintModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-xs"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Xem / In Giấy chuyển viện</span>
+                  </button>
+                </div>
+
+                <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-1">
+                    <p className="text-slate-400 font-semibold uppercase text-[11px]">
+                      Bệnh viện tuyến trên
+                    </p>
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                      {transferRecord.targetHospital}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-slate-400 font-semibold uppercase text-[11px]">
+                      Phân loại lý do
+                    </p>
+                    <p className="font-semibold text-red-700">
+                      {getTransferReasonLabel(transferRecord.reasonCategory)}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-slate-400 font-semibold uppercase text-[11px]">
+                      Thời gian chuyển
+                    </p>
+                    <p className="font-medium text-slate-700">
+                      {transferRecord.transferredAt
+                        ? new Date(transferRecord.transferredAt).toLocaleString("vi-VN")
+                        : "—"}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-slate-400 font-semibold uppercase text-[11px]">
+                      Lý do chi tiết
+                    </p>
+                    <p className="text-slate-700">{transferRecord.transferReason || "—"}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Form Phiếu khám Đa khoa */}
             <GeneralCheckupForm
               formData={formData}
@@ -585,6 +838,30 @@ export default function GeneralExaminationPage() {
           studentCode: fallbackStudentData.studentCode,
           medicinesCount: validateAndCleanMedicines(medicines).cleanedMedicines.length,
         }}
+      />
+
+      {/* MODAL LẬP HỒ SƠ CHUYỂN VIỆN */}
+      <TransferRecordModal
+        isOpen={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        onSubmit={handleConfirmTransfer}
+        submitting={isSubmittingTransfer}
+        apiError={transferApiError}
+        initialValues={{
+          currentCondition: formData.symptoms,
+          firstAidNotes: formData.treatmentSuggestions,
+        }}
+        studentInfo={{
+          studentName: fallbackStudentData.studentName,
+          studentCode: fallbackStudentData.studentCode,
+        }}
+      />
+
+      {/* MODAL XEM / IN GIẤY GIỚI THIỆU CHUYỂN VIỆN */}
+      <TransferReferralPrintModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        checkupId={checkupId}
       />
     </div>
   );

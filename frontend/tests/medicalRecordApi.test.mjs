@@ -329,3 +329,76 @@ test("medicalRecordApi rejects on backend failure envelope", async () => {
     axiosClient.post = originalPost;
   }
 });
+
+test("medicalRecordApi.createTransferRecord calls POST /medical-records/{id}/transfer", async () => {
+  const originalPost = axiosClient.post;
+  let capturedUrl = "";
+  let capturedBody = null;
+
+  try {
+    axiosClient.post = async (url, body) => {
+      capturedUrl = url;
+      capturedBody = body;
+      return {
+        success: true,
+        data: {
+          id: 101,
+          status: "COMPLETED",
+          transferRecord: {
+            id: 10,
+            recordCode: "CV2611220001",
+            checkupId: 101,
+            ...body,
+          },
+        },
+      };
+    };
+
+    const payload = {
+      targetHospital: "Bệnh viện Bạch Mai",
+      reasonCategory: "CAP_CUU_NANG",
+      transferReason: "Chấn thương nặng cần can thiệp chuyên khoa",
+      currentCondition: "Mạch nhanh 110 lần/phút",
+      firstAidNotes: "Cố định tạm thời và chườm lạnh",
+      refusalNotes: null,
+    };
+
+    const result = await medicalRecordApi.createTransferRecord(101, payload);
+
+    assert.equal(capturedUrl, "/medical-records/101/transfer");
+    assert.equal(capturedBody.reasonCategory, "CAP_CUU_NANG");
+    assert.equal(result.status, "COMPLETED");
+    assert.equal(result.transferRecord.recordCode, "CV2611220001");
+  } finally {
+    axiosClient.post = originalPost;
+  }
+});
+
+test("medicalRecordApi.getTransferReferralPrint calls GET /medical-records/{id}/transfer/print", async () => {
+  const originalGet = axiosClient.get;
+  let capturedUrl = "";
+
+  try {
+    axiosClient.get = async (url) => {
+      capturedUrl = url;
+      return {
+        success: true,
+        data: {
+          referringUnitName: "TRẠM Y TẾ TRƯỜNG ĐẠI HỌC - UNICARE",
+          recordCode: "CV2611220001",
+          targetHospital: "Bệnh viện Bạch Mai",
+          reasonCategory: "QUA_TAI",
+          readOnly: true,
+        },
+      };
+    };
+
+    const result = await medicalRecordApi.getTransferReferralPrint(101);
+
+    assert.equal(capturedUrl, "/medical-records/101/transfer/print");
+    assert.equal(result.recordCode, "CV2611220001");
+    assert.equal(result.readOnly, true);
+  } finally {
+    axiosClient.get = originalGet;
+  }
+});
