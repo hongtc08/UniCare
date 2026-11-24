@@ -107,7 +107,9 @@ export default function ShiftManagementView({
           const mapped = raw.map((d) => ({
             id: d.id,
             name: d.name || d.fullName || d.username,
-            specialty: "KHAM_DA_KHOA",
+            fullName: d.fullName || d.name || d.username,
+            specialty: d.specialty || "",
+            title: d.title || "",
           }));
           setDoctorList(mapped);
         }
@@ -379,7 +381,7 @@ export default function ShiftManagementView({
             <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
           </button>
 
-          {isAdmin && (
+          {(isAdmin || isDoctor) && (
             <button
               type="button"
               onClick={handleOpenCreateModal}
@@ -403,6 +405,7 @@ export default function ShiftManagementView({
         selectedRoom={selectedRoom}
         onRoomChange={setSelectedRoom}
         doctors={doctorList}
+        shifts={shifts}
         userRole={userRole}
         currentDoctorName={currentDoctor.name}
         onResetFilters={handleResetFilters}
@@ -419,6 +422,7 @@ export default function ShiftManagementView({
         onShiftClick={handleShiftClick}
         onAddShiftClick={handleAddShiftAtCell}
         isAdmin={isAdmin}
+        canCreateShift={isAdmin || isDoctor}
       />
 
       {/* 4. Modal Thêm / Sửa / Xem chi tiết */}

@@ -117,7 +117,9 @@ export default function ShiftCalendar({
   onShiftClick,
   onAddShiftClick,
   isAdmin = false,
+  canCreateShift,
 }) {
+  const canCreate = canCreateShift ?? isAdmin;
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
       {/* 2. Container cuộn ngang (Horizontal Scroll Wrapper) */}
@@ -200,8 +202,8 @@ export default function ShiftCalendar({
                   />
                 ))}
 
-                {/* Nút thêm ca mờ khi còn phòng trống */}
-                {isAdmin && morningShifts.length < 2 && (
+                {/* Nút mở ca / thêm ca */}
+                {canCreate && (
                   <button
                     type="button"
                     onClick={() =>
@@ -217,7 +219,7 @@ export default function ShiftCalendar({
                   </button>
                 )}
 
-                {!isAdmin && morningShifts.length === 0 && (
+                {!canCreate && morningShifts.length === 0 && (
                   <div className="flex-1 flex items-center justify-center text-xs text-slate-300">
                     --
                   </div>
@@ -279,8 +281,8 @@ export default function ShiftCalendar({
                   />
                 ))}
 
-                {/* Nút thêm ca mờ khi còn phòng trống */}
-                {isAdmin && afternoonShifts.length < 2 && (
+                {/* Nút mở ca / thêm ca */}
+                {canCreate && (
                   <button
                     type="button"
                     onClick={() =>
@@ -296,7 +298,7 @@ export default function ShiftCalendar({
                   </button>
                 )}
 
-                {!isAdmin && afternoonShifts.length === 0 && (
+                {!canCreate && afternoonShifts.length === 0 && (
                   <div className="flex-1 flex items-center justify-center text-xs text-slate-300">
                     --
                   </div>

@@ -21,6 +21,47 @@ function formatDateDMY(dateString) {
   return dateString;
 }
 
+function normalizeTimeHHMM(timeStr, fallback = "08:00") {
+  if (!timeStr) return fallback;
+  return String(timeStr).slice(0, 5);
+}
+
+function getDefaultTimesForSlot(slotKey) {
+  return SHIFT_SLOTS[slotKey] || SHIFT_SLOTS.MORNING;
+}
+
+function resolveShiftSlot(startTime, endTime) {
+  const s = normalizeTimeHHMM(startTime, "");
+  const e = normalizeTimeHHMM(endTime, "");
+  if (s === SHIFT_SLOTS.MORNING.startTime && e === SHIFT_SLOTS.MORNING.endTime) {
+    return "MORNING";
+  }
+  if (s === SHIFT_SLOTS.AFTERNOON.startTime && e === SHIFT_SLOTS.AFTERNOON.endTime) {
+    return "AFTERNOON";
+  }
+  return "CUSTOM";
+}
+
+function toMinutes(timeStr) {
+  if (!timeStr || !/^\d{2}:\d{2}$/.test(timeStr)) return Number.NaN;
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function formatSpecialtyLabel(specialty) {
+  if (!specialty) return "";
+  const trimmed = String(specialty).trim();
+  if (!trimmed) return "";
+  const upper = trimmed.toUpperCase();
+  if (upper === "DA_KHOA" || upper === "KHAM_DA_KHOA" || upper === "ĐA KHOA") {
+    return "Đa khoa";
+  }
+  if (upper === "TAM_LY" || upper === "TU_VAN_TAM_LY" || upper === "TÂM LÝ") {
+    return "Tâm lý";
+  }
+  return trimmed;
+}
+
 /**
  * Modal Thêm / Sửa / Chi tiết Ca khám tích hợp gọi API
  */
@@ -41,6 +82,11 @@ export default function ShiftDetailModal({
 }) {
   const isAdmin = userRole === "ADMIN" || userRole === "BAN_QUAN_LY";
   const isDoctor = !isAdmin;
+  const canManageShift =
+    isAdmin ||
+    (isDoctor &&
+      shift != null &&
+      Number(shift?.doctorId ?? shift?.staffId) === Number(currentUserId));
 
   // Lấy bác sĩ ban đầu:
   // Nếu là Doctor -> currentUserId
@@ -59,20 +105,25 @@ export default function ShiftDetailModal({
   const [formData, setFormData] = useState(() => {
     if (mode === "CREATE" || !shift) {
       const defaultService = "KHAM_DA_KHOA";
+      const slotPreset = getDefaultTimesForSlot(selectedSlotForCreate);
       return {
         date: selectedDayForCreate || new Date().toISOString().split("T")[0],
-        shiftSlot: selectedSlotForCreate || "MORNING",
+        shiftSlot: slotPreset.key,
+        startTime: slotPreset.startTime,
+        endTime: slotPreset.endTime,
         doctorId: initialDoctorId,
         serviceType: defaultService,
         room: SERVICE_CONFIG[defaultService].defaultRoom,
         maxCapacity: 10,
       };
     }
+    const start = normalizeTimeHHMM(shift.startTime, "08:00");
+    const end = normalizeTimeHHMM(shift.endTime, "11:00");
     return {
       date: shift.date,
-      shiftSlot:
-        shift.shiftSlot ||
-        (parseInt(shift.startTime?.split(":")[0], 10) < 12 ? "MORNING" : "AFTERNOON"),
+      shiftSlot: resolveShiftSlot(start, end),
+      startTime: start,
+      endTime: end,
       doctorId: isDoctor ? currentUserId : shift.doctorId,
       serviceType: shift.serviceType,
       room: shift.room || "P.101 - Phòng y tế",
@@ -83,7 +134,9 @@ export default function ShiftDetailModal({
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isEditing, setIsEditing] = useState(mode === "CREATE" || mode === "EDIT");
+  const [isEditing, setIsEditing] = useState(
+    mode === "CREATE" || (mode === "EDIT" && canManageShift)
+  );
 
   // Track sự thay đổi của modal hoặc shift qua key
   const [prevTrackKey, setPrevTrackKey] = useState(`${mode}-${shift?.id}-${isOpen}-${doctors.length}`);
@@ -98,21 +151,26 @@ export default function ShiftDetailModal({
     if (mode === "CREATE" || !shift) {
       setIsEditing(true);
       const defaultService = "KHAM_DA_KHOA";
+      const slotPreset = getDefaultTimesForSlot(selectedSlotForCreate);
       setFormData({
         date: selectedDayForCreate || new Date().toISOString().split("T")[0],
-        shiftSlot: selectedSlotForCreate || "MORNING",
+        shiftSlot: slotPreset.key,
+        startTime: slotPreset.startTime,
+        endTime: slotPreset.endTime,
         doctorId: getFallbackDoctorId(),
         serviceType: defaultService,
         room: SERVICE_CONFIG[defaultService].defaultRoom,
         maxCapacity: 10,
       });
     } else {
-      setIsEditing(isAdmin && mode === "EDIT");
+      setIsEditing(canManageShift && mode === "EDIT");
+      const start = normalizeTimeHHMM(shift.startTime, "08:00");
+      const end = normalizeTimeHHMM(shift.endTime, "11:00");
       setFormData({
         date: shift.date,
-        shiftSlot:
-          shift.shiftSlot ||
-          (parseInt(shift.startTime?.split(":")[0], 10) < 12 ? "MORNING" : "AFTERNOON"),
+        shiftSlot: resolveShiftSlot(start, end),
+        startTime: start,
+        endTime: end,
         doctorId: isDoctor ? currentUserId : shift.doctorId,
         serviceType: shift.serviceType,
         room: shift.room || "P.101 - Phòng y tế",
@@ -138,6 +196,19 @@ export default function ShiftDetailModal({
     e.preventDefault();
     setFormError("");
 
+    const startMinutes = toMinutes(formData.startTime);
+    const endMinutes = toMinutes(formData.endTime);
+    if (
+      !formData.startTime ||
+      !formData.endTime ||
+      Number.isNaN(startMinutes) ||
+      Number.isNaN(endMinutes) ||
+      endMinutes <= startMinutes
+    ) {
+      setFormError("Giờ kết thúc phải lớn hơn giờ bắt đầu.");
+      return;
+    }
+
     if (formData.maxCapacity <= 0) {
       setFormError("Số lượng tối đa phải lớn hơn 0");
       return;
@@ -155,16 +226,17 @@ export default function ShiftDetailModal({
       return;
     }
 
-    const slotInfo = SHIFT_SLOTS[formData.shiftSlot];
     const doc = doctors.find((d) => String(d.id) === String(formData.doctorId));
     const resolvedDoctorName = isDoctor ? currentUserName : (doc ? doc.name : "Bác sĩ");
+    const derivedSession =
+      parseInt(formData.startTime.split(":")[0], 10) < 12 ? "MORNING" : "AFTERNOON";
 
     const payload = {
       staffId: numericDoctorId,
       doctorId: numericDoctorId,
       shiftDate: formData.date,
-      startTime: slotInfo.startTime,
-      endTime: slotInfo.endTime,
+      startTime: formData.startTime,
+      endTime: formData.endTime,
       shiftType: formData.serviceType,
       serviceType: formData.serviceType,
       room: formData.room,
@@ -172,7 +244,7 @@ export default function ShiftDetailModal({
       maxQuantity: Number(formData.maxCapacity),
       status: shift?.status || "OPEN",
       doctorName: resolvedDoctorName,
-      shiftSlot: formData.shiftSlot,
+      shiftSlot: derivedSession,
     };
 
     try {
@@ -224,10 +296,17 @@ export default function ShiftDetailModal({
   };
 
   const isFull = shift ? shift.bookedCount >= shift.maxCapacity : false;
-  const slotDetails = shift
-    ? SHIFT_SLOTS[shift.shiftSlot] ||
-      (parseInt(shift.startTime?.split(":")[0], 10) < 12 ? SHIFT_SLOTS.MORNING : SHIFT_SLOTS.AFTERNOON)
-    : SHIFT_SLOTS[formData.shiftSlot];
+  const shiftStartHHMM = shift ? normalizeTimeHHMM(shift.startTime, "08:00") : formData.startTime;
+  const shiftEndHHMM = shift ? normalizeTimeHHMM(shift.endTime, "11:00") : formData.endTime;
+  const shiftSessionLabel =
+    parseInt(String(shiftStartHHMM).split(":")[0], 10) < 12 ? "Ca Sáng" : "Ca Chiều";
+  const roomOptions = Array.from(
+    new Set([
+      ...CLINIC_ROOMS,
+      ...(shift?.room ? [shift.room] : []),
+      ...(formData.room ? [formData.room] : []),
+    ])
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
@@ -245,7 +324,7 @@ export default function ShiftDetailModal({
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               {isEditing
-                ? "Thiết lập phân công ca trực, bác sĩ và phòng khám cố định"
+                ? "Thiết lập phân công ca trực, khung giờ, bác sĩ và phòng khám"
                 : `Mã ca trực: #${shift?.id}`}
             </p>
           </div>
@@ -296,7 +375,7 @@ export default function ShiftDetailModal({
                 <div>
                   <div className="text-xs text-slate-400">Ca trực</div>
                   <div className="font-semibold text-slate-800">
-                    {slotDetails?.label || `${shift.startTime} - ${shift.endTime}`}
+                    {`${shiftSessionLabel} (${shiftStartHHMM} - ${shiftEndHHMM})`}
                   </div>
                 </div>
               </div>
@@ -335,7 +414,7 @@ export default function ShiftDetailModal({
 
             {/* Actions cho Admin / Bác sĩ */}
             <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              {isAdmin && (
+              {canManageShift && (
                 <button
                   type="button"
                   onClick={handleDelete}
@@ -348,7 +427,7 @@ export default function ShiftDetailModal({
               )}
 
               <div className="flex items-center gap-2 ml-auto">
-                {isAdmin && (
+                {canManageShift && (
                   <button
                     type="button"
                     onClick={() => setIsEditing(true)}
@@ -393,20 +472,79 @@ export default function ShiftDetailModal({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Ca trực <span className="text-red-500">*</span>
+                  Mẫu ca trực <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={formData.shiftSlot}
                   disabled={isSubmitting}
                   onChange={(e) => {
-                    setFormData({ ...formData, shiftSlot: e.target.value });
+                    const nextSlot = e.target.value;
+                    if (nextSlot === "CUSTOM") {
+                      setFormData((prev) => ({ ...prev, shiftSlot: "CUSTOM" }));
+                    } else {
+                      const preset = getDefaultTimesForSlot(nextSlot);
+                      setFormData((prev) => ({
+                        ...prev,
+                        shiftSlot: preset.key,
+                        startTime: preset.startTime,
+                        endTime: preset.endTime,
+                      }));
+                    }
                     setFormError("");
                   }}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white disabled:bg-slate-50"
                 >
                   <option value="MORNING">Ca Sáng (08:00 - 11:00)</option>
                   <option value="AFTERNOON">Ca Chiều (13:00 - 17:00)</option>
+                  <option value="CUSTOM">Tùy chỉnh</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Giờ bắt đầu & Giờ kết thúc linh hoạt */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Giờ bắt đầu <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="time"
+                  required
+                  disabled={isSubmitting}
+                  value={formData.startTime}
+                  onChange={(e) => {
+                    const nextStart = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      startTime: nextStart,
+                      shiftSlot: resolveShiftSlot(nextStart, prev.endTime),
+                    }));
+                    setFormError("");
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Giờ kết thúc <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="time"
+                  required
+                  disabled={isSubmitting}
+                  value={formData.endTime}
+                  onChange={(e) => {
+                    const nextEnd = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      endTime: nextEnd,
+                      shiftSlot: resolveShiftSlot(prev.startTime, nextEnd),
+                    }));
+                    setFormError("");
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-50"
+                />
               </div>
             </div>
 
@@ -429,17 +567,23 @@ export default function ShiftDetailModal({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Phòng khám
+                  Phòng khám <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    readOnly
-                    disabled
-                    value={formData.room}
-                    className="w-full px-3 py-2 text-sm bg-slate-100 text-slate-700 border border-slate-200 rounded-lg font-medium cursor-not-allowed select-none"
-                  />
-                </div>
+                <select
+                  value={formData.room}
+                  disabled={isSubmitting}
+                  onChange={(e) => {
+                    setFormData({ ...formData, room: e.target.value });
+                    setFormError("");
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white disabled:bg-slate-50"
+                >
+                  {roomOptions.map((roomOption) => (
+                    <option key={roomOption} value={roomOption}>
+                      {roomOption}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -466,11 +610,15 @@ export default function ShiftDetailModal({
                   }}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer bg-white disabled:bg-slate-50"
                 >
-                  {doctors.map((doc) => (
-                    <option key={doc.id} value={doc.id}>
-                      {doc.name || doc.fullName} {doc.specialty ? `- ${doc.specialty === "KHAM_DA_KHOA" ? "Khoa Đa Khoa" : "Tâm Lý"}` : ""}
-                    </option>
-                  ))}
+                  {doctors.map((doc) => {
+                    const specialtyLabel = formatSpecialtyLabel(doc.specialty);
+                    return (
+                      <option key={doc.id} value={doc.id}>
+                        {doc.name || doc.fullName}
+                        {specialtyLabel ? ` - ${specialtyLabel}` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               )}
             </div>

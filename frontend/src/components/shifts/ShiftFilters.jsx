@@ -27,6 +27,7 @@ export default function ShiftFilters({
   selectedRoom,
   onRoomChange,
   doctors = [],
+  shifts = [],
   userRole = "ADMIN",
   currentDoctorName = "",
   onResetFilters,
@@ -36,6 +37,13 @@ export default function ShiftFilters({
   weekRangeLabel = "",
 }) {
   const isAdmin = userRole === "ADMIN" || userRole === "BAN_QUAN_LY";
+  const roomOptions = Array.from(
+    new Set([
+      ...CLINIC_ROOMS,
+      ...shifts.map((s) => s?.room).filter(Boolean),
+      ...(selectedRoom && selectedRoom !== "ALL" ? [selectedRoom] : []),
+    ])
+  );
 
   return (
     <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 mb-4 shadow-xs">
@@ -127,7 +135,7 @@ export default function ShiftFilters({
             </select>
           </div>
 
-          {/* 3. Dropdown Phòng khám (Đúng 2 phòng P.101 & P.102) */}
+          {/* 3. Dropdown Phòng khám (Gộp CLINIC_ROOMS và phòng thực tế từ danh sách ca) */}
           <div className="relative min-w-[195px] flex-1 sm:flex-initial">
             <Building2 className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <select
@@ -136,7 +144,7 @@ export default function ShiftFilters({
               className="w-full pl-8 pr-7 py-1.5 text-xs sm:text-sm bg-slate-50 hover:bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer"
             >
               <option value="ALL">Tất cả Phòng khám</option>
-              {CLINIC_ROOMS.map((room) => (
+              {roomOptions.map((room) => (
                 <option key={room} value={room}>
                   {room}
                 </option>
