@@ -23,9 +23,6 @@ export function validateCheckupForm(formData = {}, isCompleting = false) {
     const isPsychological = isPsychologicalCheckup(formData.checkupType);
 
     if (isPsychological) {
-      if (!formData.symptoms || !formData.symptoms.trim()) {
-        errors.symptoms = "Vui lòng nhập biểu hiện tâm lý trước khi hoàn tất phiếu tư vấn";
-      }
       if (!formData.diagnosisNotes || !formData.diagnosisNotes.trim()) {
         errors.diagnosisNotes = "Vui lòng nhập tóm tắt buổi tư vấn trước khi hoàn tất";
       }

@@ -9,7 +9,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import { PERIODIC_RESULTS } from "../../api/medicalRecordApi";
+import { CHECKUP_TYPES, PERIODIC_RESULTS } from "../../api/medicalRecordApi";
 import { isPsychologicalCheckup } from "../../utils/checkupValidation";
 
 /**
@@ -21,6 +21,7 @@ import { isPsychologicalCheckup } from "../../utils/checkupValidation";
  * @param {Function} props.onChange - (fieldName, value) => void
  * @param {Array} props.diseaseGroups - Danh sách nhóm bệnh [{ id, code, name }]
  * @param {boolean} [props.isReadOnly=false] - Trạng thái khóa cứng khi phiếu đã COMPLETED
+ * @param {boolean} [props.canSwitchCheckupType=false] - Cho phép chuyển đổi loại phiếu khi lập trực tiếp
  * @param {Object} [props.errors={}] - Đối tượng chứa lỗi validation
  * @param {string} [props.diseaseGroupNameFallback] - Tên nhóm bệnh trả về từ API chi tiết
  */
@@ -29,6 +30,7 @@ export default function GeneralCheckupForm({
   onChange,
   diseaseGroups = [],
   isReadOnly = false,
+  canSwitchCheckupType = false,
   errors = {},
   diseaseGroupNameFallback = "",
 }) {
@@ -157,6 +159,46 @@ export default function GeneralCheckupForm({
       </div>
 
       <div className="p-5 space-y-5">
+        {/* CHUYỂN ĐỔI LOẠI PHIẾU KHI LẬP TRỰC TIẾP (KHÔNG ĐI TỪ LỊCH HẸN) */}
+        {canSwitchCheckupType && !isReadOnly && (
+          <div className="p-3.5 rounded-xl border border-slate-200/90 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Loại phiếu tiếp nhận trực tiếp
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Chọn hình thức khám Đa khoa hoặc Tư vấn Tâm lý cho sinh viên
+              </span>
+            </div>
+            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleChange("checkupType", CHECKUP_TYPES.GENERAL)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  !isPsychological
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Stethoscope className="w-3.5 h-3.5" />
+                <span>Khám Đa khoa</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleChange("checkupType", CHECKUP_TYPES.PSYCHOLOGICAL)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  isPsychological
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Brain className="w-3.5 h-3.5" />
+                <span>Tư vấn Tâm lý</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* CHẾ ĐỘ KHÁM SỨC KHỎE ĐỊNH KỲ (ẨN KHI TƯ VẤN TÂM LÝ) */}
         {!isPsychological && (
           <div className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/40 space-y-3.5">
@@ -311,9 +353,11 @@ export default function GeneralCheckupForm({
               className="block text-xs font-bold text-slate-700 uppercase tracking-wider"
             >
               {isPsychological ? "Biểu hiện" : "Triệu chứng lâm sàng"}{" "}
-              {!isReadOnly && <span className="text-red-500">*</span>}
+              {!isReadOnly && !isPsychological && (
+                <span className="text-red-500">*</span>
+              )}
             </label>
-            {!isReadOnly && (
+            {!isReadOnly && !isPsychological && (
               <span className="text-[11px] text-amber-600 font-medium">
                 * Bắt buộc khi Hoàn tất ca khám
               </span>

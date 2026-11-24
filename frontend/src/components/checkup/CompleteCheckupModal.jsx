@@ -19,7 +19,12 @@ export default function CompleteCheckupModal({
 }) {
   if (!isOpen) return null;
 
-  const { studentName, studentCode, medicinesCount = 0 } = checkupInfo;
+  const {
+    studentName,
+    studentCode,
+    medicinesCount = 0,
+    isPsychological = false,
+  } = checkupInfo;
 
   return (
     <div
@@ -37,10 +42,14 @@ export default function CompleteCheckupModal({
             </div>
             <div>
               <h3 id="complete-modal-title" className="text-sm font-bold text-slate-800">
-                Xác nhận Hoàn tất Ca khám
+                {isPsychological
+                  ? "Xác nhận Hoàn tất Buổi Tư vấn"
+                  : "Xác nhận Hoàn tất Ca khám"}
               </h3>
               <p className="text-[11px] text-slate-500">
-                Khóa cứng phiếu khám & đơn thuốc vĩnh viễn
+                {isPsychological
+                  ? "Khóa cứng phiếu tư vấn tâm lý vĩnh viễn"
+                  : "Khóa cứng phiếu khám & đơn thuốc vĩnh viễn"}
               </p>
             </div>
           </div>
@@ -63,7 +72,9 @@ export default function CompleteCheckupModal({
             <div className="space-y-1">
               <p className="font-bold text-amber-900">Lưu ý trước khi hoàn tất:</p>
               <p className="text-amber-800 leading-relaxed text-[11px]">
-                Sau khi hoàn tất, phiếu khám và đơn thuốc sẽ không thể chỉnh sửa hoặc xóa.
+                {isPsychological
+                  ? "Sau khi hoàn tất, phiếu tư vấn tâm lý sẽ không thể chỉnh sửa hoặc xóa."
+                  : "Sau khi hoàn tất, phiếu khám và đơn thuốc sẽ không thể chỉnh sửa hoặc xóa."}
               </p>
             </div>
           </div>
@@ -80,21 +91,23 @@ export default function CompleteCheckupModal({
                 {studentCode ? `(${studentCode})` : ""}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <Pill className="w-3.5 h-3.5" />
-                Đơn thuốc:
-              </span>
-              <span className="font-semibold text-slate-700">
-                {medicinesCount > 0 ? (
-                  <span className="text-emerald-700 font-bold">
-                    {medicinesCount} loại thuốc kê đơn
-                  </span>
-                ) : (
-                  <span className="text-slate-500 italic">Không kê thuốc</span>
-                )}
-              </span>
-            </div>
+            {!isPsychological && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 flex items-center gap-1.5">
+                  <Pill className="w-3.5 h-3.5" />
+                  Đơn thuốc:
+                </span>
+                <span className="font-semibold text-slate-700">
+                  {medicinesCount > 0 ? (
+                    <span className="text-emerald-700 font-bold">
+                      {medicinesCount} loại thuốc kê đơn
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 italic">Không kê thuốc</span>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
 
           <p className="text-[11px] text-slate-500 italic text-center">
