@@ -317,6 +317,13 @@ export default function DoctorAppointmentList() {
     }
   };
 
+  // Helper phân loại Ca Sáng / Ca Chiều theo giờ bắt đầu (< 12h là Ca Sáng)
+  const isMorningShift = (startTime) => {
+    if (!startTime) return false;
+    const hour = parseInt(String(startTime).slice(0, 2), 10);
+    return !Number.isNaN(hour) && hour < 12;
+  };
+
   // Initials generator
   const getInitials = (name) => {
     if (!name) return "SV";
@@ -629,6 +636,8 @@ export default function DoctorAppointmentList() {
                 const endTime = item.endTime || item.end_time;
                 const shiftType = item.shiftType || item.shift_type;
                 const initials = getInitials(studentName);
+                const isMorning =
+                  item.shift_session === "MORNING" || isMorningShift(startTime);
 
                 return (
                   <button
@@ -652,12 +661,12 @@ export default function DoctorAppointmentList() {
                         </span>
                         <span
                           className={`inline-block mt-0.5 px-1.5 py-0.2 rounded text-[10px] font-semibold ${
-                            item.shift_session === "MORNING" || (startTime && startTime.startsWith("08"))
+                            isMorning
                               ? "bg-amber-50 text-amber-700 border border-amber-200/60"
                               : "bg-blue-50 text-blue-700 border border-blue-200/60"
                           }`}
                         >
-                          {startTime && startTime.startsWith("08") ? "Ca Sáng" : "Ca Chiều"}
+                          {isMorning ? "Ca Sáng" : "Ca Chiều"}
                         </span>
                       </div>
 
@@ -929,7 +938,9 @@ export default function DoctorAppointmentList() {
                     <div className="p-2.5 bg-slate-50 rounded-lg">
                       <span className="text-slate-400 block text-[11px] mb-0.5">Ca & Khung giờ</span>
                       <span className="font-semibold text-slate-800">
-                        {(selectedAppointment.startTime || selectedAppointment.start_time || "").startsWith("08")
+                        {isMorningShift(
+                          selectedAppointment.startTime || selectedAppointment.start_time
+                        )
                           ? "Ca Sáng ("
                           : "Ca Chiều ("}
                         {timeLabel(
@@ -1033,13 +1044,42 @@ export default function DoctorAppointmentList() {
                       </button>
                     </div>
                   </>
+                ) : selectedAppointment.status === "COMPLETED" ? (
+                  <div className="w-full flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                    <span className="flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      Ca khám này đã hoàn tất khám bệnh và lưu hồ sơ y tế.
+                    </span>
+                    <div className="flex items-center gap-2 ml-auto">
+                      <button
+                        type="button"
+                        disabled
+                        className="px-3 py-1.5 text-xs font-medium text-slate-400 bg-slate-100 rounded-lg cursor-not-allowed"
+                      >
+                        Hủy hẹn
+                      </button>
+                      <button
+                        type="button"
+                        disabled
+                        className="px-3 py-1.5 text-xs font-medium text-slate-400 bg-slate-100 rounded-lg cursor-not-allowed"
+                      >
+                        Dời lịch
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleStartExamination}
+                        className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg transition-colors shadow-xs"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Xem phiếu khám</span>
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="w-full flex items-center justify-between text-xs text-slate-500">
                     <span className="flex items-center gap-1.5">
                       <Info className="w-3.5 h-3.5 text-slate-400" />
-                      {selectedAppointment.status === "COMPLETED"
-                        ? "Ca khám này đã hoàn tất khám bệnh và lưu hồ sơ y tế."
-                        : selectedAppointment.status === "CANCELED"
+                      {selectedAppointment.status === "CANCELED"
                         ? "Lịch hẹn này đã bị hủy. Không thể thực hiện các thao tác khám."
                         : "Sinh viên đã được ghi nhận vắng mặt (NO_SHOW)."}
                     </span>
