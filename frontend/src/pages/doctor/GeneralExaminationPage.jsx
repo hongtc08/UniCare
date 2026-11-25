@@ -42,6 +42,7 @@ export default function GeneralExaminationPage() {
   const [checkupId, setCheckupId] = useState(pathId ? Number(pathId) : null);
   const [checkupDetail, setCheckupDetail] = useState(null);
   const [appointmentData, setAppointmentData] = useState(null);
+  const [studentOverview, setStudentOverview] = useState(null);
   const [diseaseGroups, setDiseaseGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -118,15 +119,22 @@ export default function GeneralExaminationPage() {
       };
     });
 
-    if (errors[field] || (field === "checkupType" || field === "isPeriodic")) {
+    if (errors[field] || field === "checkupType" || field === "isPeriodic") {
       setErrors((prev) => {
         const next = { ...prev };
         delete next[field];
         if (field === "checkupType" || field === "isPeriodic") {
           delete next.periodicResult;
         }
+        if (field === "checkupType" && normalizeCheckupType(value) === CHECKUP_TYPES.PSYCHOLOGICAL) {
+          delete next.symptoms;
+        }
         return next;
       });
+    }
+
+    if (field === "checkupType" && normalizeCheckupType(value) === CHECKUP_TYPES.PSYCHOLOGICAL) {
+      setPrescriptionErrors({});
     }
   };
 
@@ -298,8 +306,13 @@ export default function GeneralExaminationPage() {
   const handleSaveDraft = async () => {
     if (isReadOnly || isSavingDraft || isCompleting) return;
 
-    // Validate danh sách thuốc
-    const presResult = validateAndCleanMedicines(medicines);
+    const normalizedType = normalizeCheckupType(formData.checkupType);
+    const isPsy = normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL;
+
+    // Validate danh sách thuốc (chỉ áp dụng cho Khám Đa khoa / Định kỳ)
+    const presResult = isPsy
+      ? { isValid: true, cleanedMedicines: [], rowErrors: {} }
+      : validateAndCleanMedicines(medicines);
     if (!presResult.isValid) {
       setPrescriptionErrors(presResult.rowErrors);
       showToast("Vui lòng kiểm tra và sửa thông tin thuốc bị lỗi trước khi lưu.", "error");
@@ -310,8 +323,6 @@ export default function GeneralExaminationPage() {
       setIsSavingDraft(true);
       setError(null);
 
-      const normalizedType = normalizeCheckupType(formData.checkupType);
-      const isPsy = normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL;
       const isPeriodicFlag = !isPsy && Boolean(formData.isPeriodic);
 
       const payload = {
@@ -333,10 +344,12 @@ export default function GeneralExaminationPage() {
       };
 
       let targetId = checkupId;
+      let latestDetail = null;
       if (!targetId) {
         // Tạo mới phiếu khám nháp
         const created = await medicalRecordApi.createCheckup(payload);
         targetId = created.id;
+        latestDetail = created;
         setCheckupId(targetId);
         setCheckupDetail(created);
         // Cập nhật URL sang /doctor/checkups/{id} để tránh tạo trùng nếu bấm lại
@@ -344,22 +357,32 @@ export default function GeneralExaminationPage() {
       } else {
         // Cập nhật phiếu khám nháp đã có
         const updated = await medicalRecordApi.updateCheckup(targetId, payload);
+        latestDetail = updated;
         setCheckupDetail(updated);
       }
 
-      // Lưu danh sách thuốc đi kèm
-      const withMedicines = await medicalRecordApi.updatePrescriptions(
-        targetId,
-        presResult.cleanedMedicines
-      );
+      if (!isPsy) {
+        // Lưu danh sách thuốc đi kèm (Đa khoa / Định kỳ)
+        const withMedicines = await medicalRecordApi.updatePrescriptions(
+          targetId,
+          presResult.cleanedMedicines
+        );
+        latestDetail = withMedicines;
+        setMedicines(
+          withMedicines.prescribedMedicines && withMedicines.prescribedMedicines.length > 0
+            ? withMedicines.prescribedMedicines.map((m) => createEmptyMedicine(m))
+            : presResult.cleanedMedicines.map((m) => createEmptyMedicine(m))
+        );
+      } else if (checkupDetail?.prescribedMedicines?.length > 0) {
+        // Xóa thuốc cũ nếu trước đó phiếu là Đa khoa có kê đơn rồi chuyển sang Tâm lý
+        latestDetail = await medicalRecordApi.updatePrescriptions(targetId, []);
+        setMedicines([]);
+      } else {
+        setMedicines([]);
+      }
 
-      setCheckupDetail(withMedicines);
+      setCheckupDetail(latestDetail);
       setStatus("DRAFT");
-      setMedicines(
-        withMedicines.prescribedMedicines && withMedicines.prescribedMedicines.length > 0
-          ? withMedicines.prescribedMedicines.map((m) => createEmptyMedicine(m))
-          : presResult.cleanedMedicines.map((m) => createEmptyMedicine(m))
-      );
 
       showToast("Đã lưu nháp phiếu khám thành công!", "success");
     } catch (err) {
@@ -376,9 +399,13 @@ export default function GeneralExaminationPage() {
   const handleOpenCompleteModal = () => {
     if (isReadOnly || isSavingDraft || isCompleting) return;
 
-    // Validate toàn diện form lâm sàng & đơn thuốc
+    const isPsy = isPsychologicalCheckup(formData.checkupType);
+
+    // Validate toàn diện form lâm sàng & đơn thuốc (bỏ qua đơn thuốc khi Tư vấn tâm lý)
     const formVal = validateCheckupForm(formData, true);
-    const presVal = validateAndCleanMedicines(medicines);
+    const presVal = isPsy
+      ? { isValid: true, rowErrors: {} }
+      : validateAndCleanMedicines(medicines);
 
     if (!formVal.isValid || !presVal.isValid) {
       setErrors(formVal.errors || {});
@@ -394,14 +421,16 @@ export default function GeneralExaminationPage() {
 
   // LUỒNG 3: XÁC NHẬN HOÀN TẤT TRONG MODAL (3 BƯỚC TUẦN TỰ)
   const handleConfirmComplete = async () => {
-    const presResult = validateAndCleanMedicines(medicines);
+    const normalizedType = normalizeCheckupType(formData.checkupType);
+    const isPsy = normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL;
+    const presResult = isPsy
+      ? { isValid: true, cleanedMedicines: [] }
+      : validateAndCleanMedicines(medicines);
 
     try {
       setIsCompleting(true);
       setError(null);
 
-      const normalizedType = normalizeCheckupType(formData.checkupType);
-      const isPsy = normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL;
       const isPeriodicFlag = !isPsy && Boolean(formData.isPeriodic);
 
       const checkupPayload = {
@@ -432,8 +461,12 @@ export default function GeneralExaminationPage() {
         await medicalRecordApi.updateCheckup(targetId, checkupPayload);
       }
 
-      // BƯỚC B: Lưu đơn thuốc (khi phiếu vẫn đang là DRAFT)
-      await medicalRecordApi.updatePrescriptions(targetId, presResult.cleanedMedicines);
+      // BƯỚC B: Lưu đơn thuốc (chỉ khi không phải Tư vấn tâm lý; xóa thuốc cũ nếu có)
+      if (!isPsy) {
+        await medicalRecordApi.updatePrescriptions(targetId, presResult.cleanedMedicines);
+      } else if (checkupDetail?.prescribedMedicines?.length > 0) {
+        await medicalRecordApi.updatePrescriptions(targetId, []);
+      }
 
       // BƯỚC C: Chốt trạng thái COMPLETED qua PUT kèm đầy đủ payload (isPeriodic, periodicResult)
       const completed = await medicalRecordApi.updateCheckup(targetId, {
@@ -446,7 +479,7 @@ export default function GeneralExaminationPage() {
       setCheckupDetail(completed);
       setStatus("COMPLETED");
       setMedicines(
-        completed.prescribedMedicines && completed.prescribedMedicines.length > 0
+        !isPsy && completed.prescribedMedicines && completed.prescribedMedicines.length > 0
           ? completed.prescribedMedicines.map((m) => createEmptyMedicine(m))
           : []
       );
@@ -478,10 +511,11 @@ export default function GeneralExaminationPage() {
       setTransferApiError(null);
       setError(null);
 
+      const normalizedType = normalizeCheckupType(formData.checkupType);
+      const isPsy = normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL;
+
       let targetId = checkupId;
       if (!targetId) {
-        const normalizedType = normalizeCheckupType(formData.checkupType);
-        const isPsy = normalizedType === CHECKUP_TYPES.PSYCHOLOGICAL;
         const isPeriodicFlag = !isPsy && Boolean(formData.isPeriodic);
 
         const draftPayload = {
@@ -506,9 +540,11 @@ export default function GeneralExaminationPage() {
         targetId = created.id;
         setCheckupId(targetId);
 
-        const presResult = validateAndCleanMedicines(medicines);
-        if (presResult.isValid && presResult.cleanedMedicines.length > 0) {
-          await medicalRecordApi.updatePrescriptions(targetId, presResult.cleanedMedicines);
+        if (!isPsy) {
+          const presResult = validateAndCleanMedicines(medicines);
+          if (presResult.isValid && presResult.cleanedMedicines.length > 0) {
+            await medicalRecordApi.updatePrescriptions(targetId, presResult.cleanedMedicines);
+          }
         }
       }
 
@@ -592,7 +628,9 @@ export default function GeneralExaminationPage() {
                 {isReadOnly
                   ? `${checkupModeTitle} (Chế độ Chỉ đọc)`
                   : checkupId
-                  ? `${checkupModeTitle} & Kê Đơn Thuốc`
+                  ? isPsychologicalMode
+                    ? checkupModeTitle
+                    : `${checkupModeTitle} & Kê Đơn Thuốc`
                   : `Lập ${checkupModeTitle} Mới`}
               </h1>
               {isReadOnly ? (
@@ -707,6 +745,7 @@ export default function GeneralExaminationPage() {
             <PatientOverviewWrapper
               studentId={effectiveStudentId}
               fallbackData={fallbackStudentData}
+              onOverviewLoaded={(data) => setStudentOverview(data)}
             />
           </div>
 
@@ -781,23 +820,26 @@ export default function GeneralExaminationPage() {
               </div>
             )}
 
-            {/* Form Phiếu khám Đa khoa */}
+            {/* Form Phiếu khám Đa khoa / Tư vấn Tâm lý */}
             <GeneralCheckupForm
               formData={formData}
               onChange={handleFormChange}
               diseaseGroups={diseaseGroups}
               isReadOnly={isReadOnly}
+              canSwitchCheckupType={!appointmentId && !checkupDetail?.appointmentId && !isReadOnly}
               errors={errors}
               diseaseGroupNameFallback={checkupDetail?.diseaseGroupName}
             />
 
-            {/* Bảng Kê đơn thuốc điện tử động */}
-            <PrescriptionTable
-              medicines={medicines}
-              onChange={handleMedicinesChange}
-              isReadOnly={isReadOnly}
-              rowErrors={prescriptionErrors}
-            />
+            {/* Bảng Kê đơn thuốc điện tử động (Ẩn khi Tư vấn Tâm lý) */}
+            {!isPsychologicalMode && (
+              <PrescriptionTable
+                medicines={medicines}
+                onChange={handleMedicinesChange}
+                isReadOnly={isReadOnly}
+                rowErrors={prescriptionErrors}
+              />
+            )}
 
             {/* CỤM NÚT DƯỚI FORM */}
             {!isReadOnly && (
@@ -836,7 +878,10 @@ export default function GeneralExaminationPage() {
         checkupInfo={{
           studentName: fallbackStudentData.studentName,
           studentCode: fallbackStudentData.studentCode,
-          medicinesCount: validateAndCleanMedicines(medicines).cleanedMedicines.length,
+          isPsychological: isPsychologicalMode,
+          medicinesCount: isPsychologicalMode
+            ? 0
+            : validateAndCleanMedicines(medicines).cleanedMedicines.length,
         }}
       />
 
@@ -855,6 +900,7 @@ export default function GeneralExaminationPage() {
           studentName: fallbackStudentData.studentName,
           studentCode: fallbackStudentData.studentCode,
         }}
+        healthInsurance={studentOverview?.healthInsurance || null}
       />
 
       {/* MODAL XEM / IN GIẤY GIỚI THIỆU CHUYỂN VIỆN */}

@@ -7,6 +7,7 @@ import {
   Clock,
   Lock,
   Send,
+  Heart,
 } from "lucide-react";
 import { TRANSFER_REASON_CATEGORIES } from "../../api/medicalRecordApi";
 import { validateTransferForm } from "../../utils/checkupValidation";
@@ -24,6 +25,22 @@ function toLocalDateTimeInputValue(date = new Date()) {
   )}:${pad(date.getMinutes())}`;
 }
 
+function formatDateVN(dateStr) {
+  if (!dateStr) return "—";
+  const datePart = String(dateStr).slice(0, 10);
+  const parts = datePart.split("-");
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return datePart;
+}
+
+function getTodayISODate() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 /**
  * Modal Lập Hồ sơ Chuyển viện (BE3 - POST /api/medical-records/{id}/transfer).
  */
@@ -39,6 +56,7 @@ function TransferRecordModalContent({
   apiError = null,
   initialValues = {},
   studentInfo = {},
+  healthInsurance = null,
 }) {
   const [form, setForm] = useState(() => ({
     targetHospital: "",
@@ -50,6 +68,36 @@ function TransferRecordModalContent({
     transferredAt: toLocalDateTimeInputValue(),
   }));
   const [errors, setErrors] = useState({});
+
+  const hasCard = Boolean(
+    healthInsurance?.cardNumber && String(healthInsurance.cardNumber).trim()
+  );
+  const expDateStr = healthInsurance?.expirationDate
+    ? String(healthInsurance.expirationDate).slice(0, 10)
+    : "";
+  const isExpired =
+    hasCard &&
+    (String(healthInsurance?.status || "").toUpperCase() === "EXPIRED" ||
+      (Boolean(expDateStr) && expDateStr < getTodayISODate()));
+  const isExpiringSoon =
+    hasCard &&
+    !isExpired &&
+    String(healthInsurance?.status || "").toUpperCase() === "EXPIRING_SOON";
+  const needsBhytWarning = !hasCard || isExpired;
+
+  const bhytStatusText = !hasCard
+    ? "Chưa có thẻ"
+    : isExpired
+    ? healthInsurance?.statusDescription || "Đã hết hạn"
+    : isExpiringSoon
+    ? healthInsurance?.statusDescription || "Sắp hết hạn"
+    : healthInsurance?.statusDescription || "Còn hiệu lực";
+
+  const bhytBadgeClass = !hasCard || isExpired
+    ? "bg-rose-50 text-rose-700 border-rose-200"
+    : isExpiringSoon
+    ? "bg-amber-50 text-amber-700 border-amber-200"
+    : "bg-emerald-50 text-emerald-700 border-emerald-200";
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -141,6 +189,61 @@ function TransferRecordModalContent({
                 </p>
               </div>
             </div>
+
+            {/* THÔNG TIN THẺ BHYT CỦA SINH VIÊN */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <Heart className="w-3.5 h-3.5 text-rose-500" />
+                  Thông tin Thẻ BHYT của sinh viên
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold border ${bhytBadgeClass}`}
+                >
+                  {bhytStatusText}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <span className="text-[11px] text-slate-400 block">Số thẻ BHYT</span>
+                  <span className="font-mono font-semibold text-slate-800">
+                    {hasCard ? healthInsurance.cardNumber : "Chưa cập nhật"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-400 block">Nơi ĐK KCB ban đầu</span>
+                  <span className="font-medium text-slate-800 block truncate" title={healthInsurance?.initialHospital || ""}>
+                    {healthInsurance?.initialHospital || "Chưa cập nhật"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-400 block">Hạn sử dụng</span>
+                  <span className="font-semibold text-slate-800">
+                    {formatDateVN(healthInsurance?.expirationDate)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* CẢNH BÁO VÀNG KHI CHƯA CÓ HOẶC HẾT HẠN BHYT (KHÔNG CHẶN CHUYỂN VIỆN) */}
+            {needsBhytWarning && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 flex items-start gap-3 text-xs text-amber-900">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold">
+                    {!hasCard
+                      ? "Cảnh báo: Sinh viên chưa có thông tin thẻ BHYT"
+                      : "Cảnh báo: Thẻ BHYT của sinh viên đã hết hạn"}
+                  </p>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    {!hasCard
+                      ? "Sinh viên chưa cập nhật thẻ BHYT trên hệ thống. Lưu ý thông báo chi phí tự túc hoặc đề nghị sinh viên/người nhà bổ sung thông tin thẻ trước khi chuyển tuyến (vẫn có thể xác nhận chuyển viện ngay trong trường hợp khẩn cấp)."
+                      : "Thẻ BHYT đã hết hạn sử dụng. Lưu ý thông báo chi phí tự túc hoặc kiểm tra gia hạn thẻ trước khi chuyển tuyến (vẫn có thể xác nhận chuyển viện ngay trong trường hợp khẩn cấp)."}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* LỖI TỪ BE NẾU CÓ */}
             {apiError && (

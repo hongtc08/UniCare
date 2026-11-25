@@ -44,7 +44,7 @@ test("validateCheckupForm requires symptoms and diagnosisNotes for GENERAL in CO
   assert.equal(Object.keys(validResult.errors).length, 0);
 });
 
-test("validateCheckupForm requires symptoms and diagnosisNotes for PSYCHOLOGICAL in COMPLETED mode", () => {
+test("validateCheckupForm requires only diagnosisNotes for PSYCHOLOGICAL in COMPLETED mode", () => {
   const invalidForm = {
     checkupType: "PSYCHOLOGICAL",
     symptoms: "",
@@ -53,17 +53,18 @@ test("validateCheckupForm requires symptoms and diagnosisNotes for PSYCHOLOGICAL
 
   const result = validateCheckupForm(invalidForm, true);
   assert.equal(result.isValid, false);
-  assert.ok(result.errors.symptoms);
+  assert.equal(result.errors.symptoms, undefined);
   assert.ok(result.errors.diagnosisNotes);
 
-  const validForm = {
+  const validWithoutSymptoms = {
     checkupType: "PSYCHOLOGICAL",
-    symptoms: "Lo âu kéo dài, mất ngủ 2 tuần",
+    symptoms: "",
     diagnosisNotes: "Tư vấn stress áp lực mùa thi và phương pháp thư giãn",
   };
 
-  const validResult = validateCheckupForm(validForm, true);
+  const validResult = validateCheckupForm(validWithoutSymptoms, true);
   assert.equal(validResult.isValid, true);
+  assert.equal(Object.keys(validResult.errors).length, 0);
 });
 
 test("validateCheckupForm requires periodicResult when isPeriodic is true in COMPLETED mode", () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   AlertTriangle,
   Heart,
@@ -19,10 +19,20 @@ import { medicalRecordApi } from "../../api/medicalRecordApi";
  * @param {Object} props
  * @param {number|string} [props.studentId]
  * @param {Object} [props.fallbackData] - Thông tin dự phòng từ Checkup Detail hoặc Appointment
+ * @param {Function} [props.onOverviewLoaded] - Callback trả dữ liệu overview sau khi tải xong
  */
-export default function PatientOverviewWrapper({ studentId, fallbackData = {} }) {
+export default function PatientOverviewWrapper({
+  studentId,
+  fallbackData = {},
+  onOverviewLoaded,
+}) {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(() => Boolean(studentId));
+  const onOverviewLoadedRef = useRef(onOverviewLoaded);
+
+  useEffect(() => {
+    onOverviewLoadedRef.current = onOverviewLoaded;
+  }, [onOverviewLoaded]);
 
   useEffect(() => {
     let active = true;
@@ -38,10 +48,12 @@ export default function PatientOverviewWrapper({ studentId, fallbackData = {} })
       .then((data) => {
         if (!active) return;
         setOverview(data);
+        onOverviewLoadedRef.current?.(data || null);
       })
       .catch((err) => {
         if (!active) return;
         console.warn("Không thể tải hồ sơ tổng hợp sinh viên:", err);
+        onOverviewLoadedRef.current?.(null);
       })
       .finally(() => {
         if (active) setLoading(false);

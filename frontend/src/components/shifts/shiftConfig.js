@@ -2,10 +2,12 @@
  * Cấu hình hệ thống lịch trực & ca khám bệnh tại trạm y tế
  */
 
-// 2 Phòng khám cố định của trạm y tế
+// Danh sách phòng khám tại trạm y tế
 export const CLINIC_ROOMS = [
   "P.101 - Phòng y tế",
   "P.102 - Phòng tư vấn tâm lý",
+  "P.103 - Phòng khám Đa khoa 2",
+  "P.104 - Phòng khám dự phòng",
 ];
 
 // 2 Khung giờ ca trực chuẩn cố định trong ngày
