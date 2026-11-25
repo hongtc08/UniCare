@@ -83,7 +83,7 @@ class HealthInsuranceControllerTest {
                 when(healthInsuranceService.getHealthInsurances(eq("DN401"), eq("DANG_HIEU_LUC"), any()))
                                 .thenReturn(List.of(sampleResponse));
 
-                Principal principal = () -> "admin_user";
+                Principal principal = () -> "nvyt01";
 
                 mockMvc.perform(get("/api/health-insurances")
                                 .principal(principal)

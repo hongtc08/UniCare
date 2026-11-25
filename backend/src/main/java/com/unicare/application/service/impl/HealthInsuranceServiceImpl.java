@@ -52,8 +52,11 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
                     .orElse(Collections.emptyList());
         }
 
-        // Bác sĩ / Quản trị viên xem toàn bộ danh sách, có hỗ trợ tìm kiếm và lọc theo
-        // trạng thái
+        if (currentUser.getRole() != Role.NHAN_VIEN_Y_TE) {
+            throw new AccessDeniedException("Chỉ Nhân viên y tế hoặc Sinh viên (thẻ của chính mình) mới có quyền xem thông tin thẻ BHYT");
+        }
+
+        // Nhân viên y tế xem toàn bộ danh sách, có hỗ trợ tìm kiếm và lọc theo trạng thái
         String cleanSearch = ValidationUtils.cleanSearch(search);
         List<HealthInsurance> list = healthInsuranceRepository.searchHealthInsurances(cleanSearch);
 
@@ -166,6 +169,11 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
     @Override
     @Transactional
     public void deleteHealthInsurance(Long id, String currentUsername) {
+        User currentUser = resolveCurrentUser(currentUsername);
+        if (currentUser.getRole() != Role.NHAN_VIEN_Y_TE) {
+            throw new AccessDeniedException("Chỉ Nhân viên y tế mới có quyền xóa thẻ BHYT");
+        }
+
         HealthInsurance insurance = healthInsuranceRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thẻ BHYT với mã ID: " + id));
 
@@ -188,6 +196,10 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
             return currentUser.getId();
         }
 
+        if (currentUser.getRole() != Role.NHAN_VIEN_Y_TE) {
+            throw new AccessDeniedException("Chỉ Nhân viên y tế hoặc Sinh viên (thẻ của chính mình) mới có quyền thêm thẻ BHYT");
+        }
+
         if (requestedStudentId == null) {
             throw new BadRequestException("Vui lòng cung cấp mã ID sinh viên (studentId)");
         }
@@ -195,8 +207,14 @@ public class HealthInsuranceServiceImpl implements HealthInsuranceService {
     }
 
     private void validateStudentAccess(User currentUser, Long targetStudentId) {
-        if (currentUser.getRole() == Role.SINH_VIEN && !currentUser.getId().equals(targetStudentId)) {
-            throw new AccessDeniedException("Sinh viên chỉ được phép xem thông tin thẻ BHYT của chính mình");
+        if (currentUser.getRole() == Role.SINH_VIEN) {
+            if (!currentUser.getId().equals(targetStudentId)) {
+                throw new AccessDeniedException("Sinh viên chỉ được phép xem thông tin thẻ BHYT của chính mình");
+            }
+            return;
+        }
+        if (currentUser.getRole() != Role.NHAN_VIEN_Y_TE) {
+            throw new AccessDeniedException("Chỉ Nhân viên y tế hoặc Sinh viên (thẻ của chính mình) mới có quyền truy cập thẻ BHYT");
         }
     }
 
