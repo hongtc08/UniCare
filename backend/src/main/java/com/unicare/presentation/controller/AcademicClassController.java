@@ -52,7 +52,7 @@ public class AcademicClassController {
      * POST /api/classes
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('BAN_QUAN_LY')")
     public ResponseEntity<ApiResponse<AcademicClassResponse>> createClass(
             @Valid @RequestBody AcademicClassRequest request
     ) {
@@ -66,7 +66,7 @@ public class AcademicClassController {
      * PUT /api/classes/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('BAN_QUAN_LY')")
     public ResponseEntity<ApiResponse<AcademicClassResponse>> updateClass(
             @PathVariable Integer id,
             @Valid @RequestBody AcademicClassRequest request
@@ -80,7 +80,7 @@ public class AcademicClassController {
      * DELETE /api/classes/{id}
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('BAN_QUAN_LY')")
     public ResponseEntity<ApiResponse<Void>> deleteClass(@PathVariable Integer id) {
         academicClassService.deleteClass(id);
         return ResponseEntity.ok(ApiResponse.success("Xóa lớp học thành công", null));

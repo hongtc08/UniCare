@@ -51,7 +51,7 @@ public class DiseaseGroupController {
      * POST /api/disease-groups
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('BAN_QUAN_LY')")
     public ResponseEntity<ApiResponse<DiseaseGroupResponse>> createDiseaseGroup(
             @Valid @RequestBody DiseaseGroupRequest request
     ) {
@@ -65,7 +65,7 @@ public class DiseaseGroupController {
      * PUT /api/disease-groups/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('BAN_QUAN_LY')")
     public ResponseEntity<ApiResponse<DiseaseGroupResponse>> updateDiseaseGroup(
             @PathVariable Integer id,
             @Valid @RequestBody DiseaseGroupRequest request
@@ -79,7 +79,7 @@ public class DiseaseGroupController {
      * DELETE /api/disease-groups/{id}
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('BAN_QUAN_LY')")
     public ResponseEntity<ApiResponse<Void>> deleteDiseaseGroup(@PathVariable Integer id) {
         diseaseGroupService.deleteDiseaseGroup(id);
         return ResponseEntity.ok(ApiResponse.success("Xóa nhóm bệnh thành công", null));
