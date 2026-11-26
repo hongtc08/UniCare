@@ -35,6 +35,13 @@ public interface MoodLogRepository extends JpaRepository<MoodLog, Long> {
             @Param("endTime") OffsetDateTime endTime
     );
 
+    @Query("SELECT m FROM MoodLog m " +
+           "JOIN FETCH m.student s " +
+           "JOIN FETCH s.user u " +
+           "WHERE m.student.id = :studentId " +
+           "ORDER BY m.logTime DESC, m.id DESC")
+    List<MoodLog> findAllByStudentIdWithStudentOrderByLogTimeDesc(@Param("studentId") Long studentId);
+
     boolean existsByStudentIdAndLogTimeGreaterThanEqualAndLogTimeLessThan(
             Long studentId,
             OffsetDateTime startTime,

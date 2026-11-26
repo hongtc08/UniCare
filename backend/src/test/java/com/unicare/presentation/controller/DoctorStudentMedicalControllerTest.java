@@ -1,11 +1,17 @@
 package com.unicare.presentation.controller;
 
+import com.unicare.application.dto.response.Dass21ResultResponse;
+import com.unicare.application.dto.response.Dass21ScorePointResponse;
 import com.unicare.application.dto.response.HealthInsuranceResponse;
 import com.unicare.application.dto.response.HealthProfileResponse;
 import com.unicare.application.dto.response.MedicalCheckupSummaryResponse;
+import com.unicare.application.dto.response.MoodLogHistoryResponse;
 import com.unicare.application.dto.response.StudentMedicalOverviewResponse;
+import com.unicare.application.dto.response.StudentMentalHealthHistoryResponse;
 import com.unicare.application.dto.response.StudentPersonalInfoResponse;
+import com.unicare.application.service.DoctorMentalHealthService;
 import com.unicare.application.service.HealthProfileService;
+import com.unicare.common.exception.BadRequestException;
 import com.unicare.common.exception.ResourceNotFoundException;
 import com.unicare.presentation.advice.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.security.Principal;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +43,9 @@ class DoctorStudentMedicalControllerTest {
 
     @Mock
     private HealthProfileService healthProfileService;
+
+    @Mock
+    private DoctorMentalHealthService doctorMentalHealthService;
 
     @InjectMocks
     private DoctorStudentMedicalController doctorStudentMedicalController;
@@ -172,5 +182,116 @@ class DoctorStudentMedicalControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[0].classCode").value("SE104.O11"));
+    }
+
+    @Test
+    @DisplayName("GET /api/doctor/students/{studentId}/mental-health-history, /dass21-history & /mood-logs - Thành công & Chặn phân quyền")
+    void doctorMentalHealthEndpoints_Success_And_Forbidden() throws Exception {
+        assertThat(new DoctorStudentMedicalController(healthProfileService)).isNotNull();
+
+        Dass21ResultResponse dassRes = new Dass21ResultResponse();
+        dassRes.setId(102L);
+        dassRes.setStudentId(2L);
+        dassRes.setStudentCode("24520579");
+        dassRes.setDepressionScore(10);
+        dassRes.setAnxietyScore(8);
+        dassRes.setStressScore(12);
+        dassRes.setTotalScore(30);
+        dassRes.setDepressionLevel("Nhẹ");
+
+        Dass21ScorePointResponse scorePoint = new Dass21ScorePointResponse();
+        scorePoint.setId(102L);
+        scorePoint.setDepressionScore(10);
+        scorePoint.setAnxietyScore(8);
+        scorePoint.setStressScore(12);
+        scorePoint.setTotalScore(30);
+
+        MoodLogHistoryResponse moodHistory = MoodLogHistoryResponse.builder()
+                .period("MONTH")
+                .totalLogs(2)
+                .averageMoodLevel(3.5)
+                .build();
+
+        StudentMentalHealthHistoryResponse combined = new StudentMentalHealthHistoryResponse(
+                sampleOverview.getStudentInfo(),
+                1,
+                dassRes,
+                List.of(scorePoint),
+                List.of(dassRes),
+                moodHistory
+        );
+
+        when(doctorMentalHealthService.getStudentMentalHealthHistory("bs001", 2L, "MONTH", null, null))
+                .thenReturn(combined);
+
+        mockMvc.perform(get("/api/doctor/students/2/mental-health-history")
+                        .param("period", "MONTH")
+                        .principal(doctorPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.totalDass21Tests").value(1))
+                .andExpect(jsonPath("$.data.latestDass21.depressionScore").value(10))
+                .andExpect(jsonPath("$.data.dass21ScoreTrend[0].totalScore").value(30))
+                .andExpect(jsonPath("$.data.moodHistory.averageMoodLevel").value(3.5));
+
+        // Alias /{studentId}/mental-health và nhánh principal == null
+        when(doctorMentalHealthService.getStudentMentalHealthHistory(null, 2L, null, null, null))
+                .thenReturn(combined);
+        mockMvc.perform(get("/api/doctor/students/2/mental-health"))
+                .andExpect(status().isOk());
+
+        // Chặn Ban quản lý (403) và Sinh viên khác (403)
+        when(doctorMentalHealthService.getStudentMentalHealthHistory("admin", 2L, null, null, null))
+                .thenThrow(new AccessDeniedException("Ban quản lý không được phép truy cập"));
+        mockMvc.perform(get("/api/doctor/students/2/mental-health-history")
+                        .principal(() -> "admin"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
+
+        when(doctorMentalHealthService.getStudentMentalHealthHistory("sv_other", 2L, null, null, null))
+                .thenThrow(new AccessDeniedException("Chỉ Bác sĩ / Chuyên gia tâm lý"));
+        mockMvc.perform(get("/api/doctor/students/2/mental-health-history")
+                        .principal(() -> "sv_other"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
+
+        // GET /{studentId}/dass21-history (kèm lọc ngày và nhánh principal == null)
+        LocalDate from = LocalDate.of(2026, 11, 1);
+        LocalDate to = LocalDate.of(2026, 11, 26);
+        when(doctorMentalHealthService.getStudentDass21History("bs001", 2L, from, to))
+                .thenReturn(List.of(dassRes));
+        mockMvc.perform(get("/api/doctor/students/2/dass21-history")
+                        .param("fromDate", "2026-11-01")
+                        .param("toDate", "2026-11-26")
+                        .principal(doctorPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(102));
+
+        when(doctorMentalHealthService.getStudentDass21History(null, 2L, null, null))
+                .thenReturn(List.of(dassRes));
+        mockMvc.perform(get("/api/doctor/students/2/dass21"))
+                .andExpect(status().isOk());
+
+        // GET /{studentId}/mood-logs (200 OK, nhánh principal == null và 400 Bad Request)
+        when(doctorMentalHealthService.getStudentMoodLogsForDoctor("bs001", 2L, "WEEK", null, null))
+                .thenReturn(moodHistory);
+        mockMvc.perform(get("/api/doctor/students/2/mood-logs")
+                        .param("period", "WEEK")
+                        .principal(doctorPrincipal))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.averageMoodLevel").value(3.5));
+
+        when(doctorMentalHealthService.getStudentMoodLogsForDoctor(null, 2L, null, null, null))
+                .thenReturn(moodHistory);
+        mockMvc.perform(get("/api/doctor/students/2/mood-logs"))
+                .andExpect(status().isOk());
+
+        when(doctorMentalHealthService.getStudentMoodLogsForDoctor("bs001", 2L, "INVALID", null, null))
+                .thenThrow(new BadRequestException("Giá trị period không hợp lệ"));
+        mockMvc.perform(get("/api/doctor/students/2/mood-logs")
+                        .param("period", "INVALID")
+                        .principal(doctorPrincipal))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
     }
 }
