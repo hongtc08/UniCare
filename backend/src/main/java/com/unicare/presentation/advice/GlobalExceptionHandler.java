@@ -75,8 +75,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException ex) {
+        String rawMessage = ex.getMessage() != null ? ex.getMessage().trim() : "";
+        String message = (!rawMessage.isEmpty()
+                && !"Access Denied".equalsIgnoreCase(rawMessage)
+                && !"Access is denied".equalsIgnoreCase(rawMessage))
+                ? rawMessage
+                : "Bạn không có quyền thực hiện thao tác này";
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error("Bạn không có quyền thực hiện thao tác này"));
+                .body(ApiResponse.error(message));
     }
 
     @ExceptionHandler(LockedException.class)

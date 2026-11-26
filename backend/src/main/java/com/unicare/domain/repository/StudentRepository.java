@@ -14,6 +14,10 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
 
     Optional<Student> findByStudentCode(String studentCode);
 
+    boolean existsByStudentCodeIgnoreCase(String studentCode);
+
+    boolean existsByStudentCodeIgnoreCaseAndIdNot(String studentCode, Long id);
+
     boolean existsByAcademicClassId(Integer classId);
 
     @Query("SELECT s FROM Student s " +

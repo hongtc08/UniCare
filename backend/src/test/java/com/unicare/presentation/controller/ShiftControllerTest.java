@@ -20,6 +20,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -113,10 +114,10 @@ class ShiftControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/shifts/doctors - Trả về danh sách bác sĩ rút gọn cho Dropdown")
+    @DisplayName("GET /api/shifts/doctors - Trả về danh sách bác sĩ rút gọn kèm title & specialty cho Dropdown")
     void getAvailableDoctors_ReturnsList() throws Exception {
         DoctorOptionResponse doctor = new DoctorOptionResponse(
-                10L, "bs01", "BS. Nguyễn Văn Y", "BS. Nguyễn Văn Y", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE
+                10L, "bs01", "BS. Nguyễn Văn Y", "BS. Nguyễn Văn Y", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE, "BAC_SI", "DA_KHOA"
         );
         when(shiftService.getAvailableDoctors()).thenReturn(List.of(doctor));
 
@@ -126,7 +127,9 @@ class ShiftControllerTest {
                 .andExpect(jsonPath("$.data[0].id").value(10))
                 .andExpect(jsonPath("$.data[0].name").value("BS. Nguyễn Văn Y"))
                 .andExpect(jsonPath("$.data[0].fullName").value("BS. Nguyễn Văn Y"))
-                .andExpect(jsonPath("$.data[0].role").value("NHAN_VIEN_Y_TE"));
+                .andExpect(jsonPath("$.data[0].role").value("NHAN_VIEN_Y_TE"))
+                .andExpect(jsonPath("$.data[0].title").value("BAC_SI"))
+                .andExpect(jsonPath("$.data[0].specialty").value("DA_KHOA"));
     }
 
     @Test
@@ -244,19 +247,29 @@ class ShiftControllerTest {
     }
 
     @Test
-    @DisplayName("DELETE /api/shifts/{id} - Xóa thành công và chặn xóa khi đã có lịch hẹn")
+    @DisplayName("DELETE /api/shifts/{id} - Xóa thành công, chặn xóa khi đã có lịch hẹn và chặn xóa ca của bác sĩ khác")
     void deleteShift_Success_And_BlockedWhenBooked() throws Exception {
-        mockMvc.perform(delete("/api/shifts/1"))
+        mockMvc.perform(delete("/api/shifts/1")
+                        .principal(() -> "bs01"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("Xóa ca khám thành công"));
 
         doThrow(new BadRequestException("Ca khám đã có 2 lịch hẹn. Vui lòng hủy hoặc dời tất cả lịch hẹn trước khi xóa ca khám."))
-                .when(shiftService).deleteShift(2L);
+                .when(shiftService).deleteShift(2L, null);
 
         mockMvc.perform(delete("/api/shifts/2"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Ca khám đã có 2 lịch hẹn. Vui lòng hủy hoặc dời tất cả lịch hẹn trước khi xóa ca khám."));
+
+        doThrow(new AccessDeniedException("Bác sĩ chỉ được phép xóa ca khám do chính mình phụ trách"))
+                .when(shiftService).deleteShift(3L, "bs02");
+
+        mockMvc.perform(delete("/api/shifts/3")
+                        .principal(() -> "bs02"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bác sĩ chỉ được phép xóa ca khám do chính mình phụ trách"));
     }
 }

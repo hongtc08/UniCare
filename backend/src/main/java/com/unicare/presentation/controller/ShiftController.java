@@ -136,8 +136,12 @@ public class ShiftController {
      */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
-    public ResponseEntity<ApiResponse<Void>> deleteShift(@PathVariable Long id) {
-        shiftService.deleteShift(id);
+    public ResponseEntity<ApiResponse<Void>> deleteShift(
+            @PathVariable Long id,
+            Principal principal
+    ) {
+        String currentUsername = principal != null ? principal.getName() : null;
+        shiftService.deleteShift(id, currentUsername);
         return ResponseEntity.ok(ApiResponse.success("Xóa ca khám thành công", null));
     }
 }

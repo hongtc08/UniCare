@@ -87,5 +87,9 @@ public interface ShiftService {
 
     ShiftResponse updateShift(Long id, ShiftRequest request, String currentUsername);
 
-    void deleteShift(Long id);
+    void deleteShift(Long id, String currentUsername);
+
+    default void deleteShift(Long id) {
+        deleteShift(id, null);
+    }
 }

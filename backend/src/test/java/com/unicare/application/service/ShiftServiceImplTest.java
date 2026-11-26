@@ -21,9 +21,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -64,8 +66,8 @@ class ShiftServiceImplTest {
                 .id(10L)
                 .user(sampleDoctor)
                 .staffCode("BS0010")
-                .title("Bác sĩ")
-                .specialty("Đa khoa")
+                .title("BAC_SI")
+                .specialty("DA_KHOA")
                 .build();
         sampleDoctor.setMedicalStaff(sampleStaff);
 
@@ -179,18 +181,43 @@ class ShiftServiceImplTest {
     }
 
     @Test
-    @DisplayName("Lấy danh sách bác sĩ đang hoạt động cho Dropdown thành công")
+    @DisplayName("Lấy danh sách bác sĩ đang hoạt động cho Dropdown thành công kèm title và specialty")
     void getAvailableDoctors_Success() {
+        User doctorWithoutProfile = new User("bs02", "pwd", "BS. Trần Tâm", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE);
+        doctorWithoutProfile.setId(11L);
+
         when(userRepository.searchUsers("", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE))
-                .thenReturn(List.of(sampleDoctor));
+                .thenReturn(List.of(sampleDoctor, doctorWithoutProfile));
 
         List<DoctorOptionResponse> doctors = shiftService.getAvailableDoctors();
 
-        assertThat(doctors).hasSize(1);
+        assertThat(doctors).hasSize(2);
         assertThat(doctors.get(0).getId()).isEqualTo(10L);
         assertThat(doctors.get(0).getName()).isEqualTo("BS. Nguyễn Văn Y");
         assertThat(doctors.get(0).getFullName()).isEqualTo("BS. Nguyễn Văn Y");
         assertThat(doctors.get(0).getRole()).isEqualTo(Role.NHAN_VIEN_Y_TE);
+        assertThat(doctors.get(0).getTitle()).isEqualTo("BAC_SI");
+        assertThat(doctors.get(0).getSpecialty()).isEqualTo("DA_KHOA");
+        assertThat(doctors.get(1).getTitle()).isNull();
+        assertThat(doctors.get(1).getSpecialty()).isNull();
+        assertThat(DoctorOptionResponse.fromEntity(null)).isNull();
+
+        DoctorOptionResponse legacyOption = new DoctorOptionResponse(
+                12L, "bs03", "BS. C", "BS. C", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE
+        );
+        DoctorOptionResponse emptyOption = new DoctorOptionResponse();
+        emptyOption.setId(legacyOption.getId());
+        emptyOption.setUsername(legacyOption.getUsername());
+        emptyOption.setName(legacyOption.getName());
+        emptyOption.setFullName(legacyOption.getFullName());
+        emptyOption.setRole(legacyOption.getRole());
+        emptyOption.setStatus(legacyOption.getStatus());
+        emptyOption.setTitle("CHUYEN_GIA_TAM_LY");
+        emptyOption.setSpecialty("TAM_LY");
+        assertThat(emptyOption.getUsername()).isEqualTo("bs03");
+        assertThat(emptyOption.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(emptyOption.getTitle()).isEqualTo("CHUYEN_GIA_TAM_LY");
+        assertThat(emptyOption.getSpecialty()).isEqualTo("TAM_LY");
     }
 
     @Test
@@ -502,7 +529,61 @@ class ShiftServiceImplTest {
         ShiftResponse response = shiftService.createShift(request, "admin01");
 
         assertThat(response).isNotNull();
-        verify(medicalStaffRepository).save(any(MedicalStaff.class));
+        ArgumentCaptor<MedicalStaff> staffCaptor = ArgumentCaptor.forClass(MedicalStaff.class);
+        verify(medicalStaffRepository).save(staffCaptor.capture());
+        assertThat(staffCaptor.getValue().getTitle()).isEqualTo("BAC_SI");
+        assertThat(staffCaptor.getValue().getSpecialty()).isEqualTo("DA_KHOA");
+    }
+
+    @Test
+    @DisplayName("Kiểm tra quyền sở hữu ca khám của Bác sĩ khi tạo, cập nhật và xóa ca khám (403 Forbidden)")
+    void shiftOwnership_DoctorCannotMutateOtherDoctorsShift() {
+        User otherDoctor = new User("bs02", "pwd", "BS. Khác", Role.NHAN_VIEN_Y_TE, UserStatus.ACTIVE);
+        otherDoctor.setId(20L);
+        MedicalStaff otherStaff = MedicalStaff.builder()
+                .id(20L)
+                .user(otherDoctor)
+                .staffCode("BS0020")
+                .title("BAC_SI")
+                .specialty("TAM_LY")
+                .build();
+
+        when(userRepository.findByUsername("bs01")).thenReturn(Optional.of(sampleDoctor));
+        when(userRepository.findByUsername("bs02")).thenReturn(Optional.of(otherDoctor));
+        when(userRepository.findById(20L)).thenReturn(Optional.of(otherDoctor));
+        when(medicalStaffRepository.findById(20L)).thenReturn(Optional.of(otherStaff));
+
+        // 1. Bác sĩ bs01 tạo ca khám nhưng truyền doctorId = 20L (bs02) -> 403
+        ShiftRequest createForOther = new ShiftRequest(
+                20L, sampleDate, LocalTime.of(8, 0), LocalTime.of(9, 0), ServiceType.TU_VAN_TAM_LY, "P2", 5
+        );
+        assertThatThrownBy(() -> shiftService.createShift(createForOther, "bs01"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Bác sĩ chỉ được phép mở ca khám cho chính mình");
+
+        // 2. Bác sĩ bs02 cập nhật ca 100L đang thuộc về bs01 -> 403
+        when(shiftRepository.findByIdWithDoctor(100L)).thenReturn(Optional.of(sampleShift));
+        ShiftRequest updateReq = new ShiftRequest(
+                null, sampleDate, LocalTime.of(8, 0), LocalTime.of(9, 30), ServiceType.KHAM_DA_KHOA, "P1", 10
+        );
+        assertThatThrownBy(() -> shiftService.updateShift(100L, updateReq, "bs02"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Bác sĩ chỉ được phép chỉnh sửa ca khám do chính mình phụ trách");
+
+        // 3. Bác sĩ bs01 cập nhật ca 100L của chính mình nhưng gán lại sang doctorId = 20L (bs02) -> 403
+        assertThatThrownBy(() -> shiftService.updateShift(100L, createForOther, "bs01"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Bác sĩ không được phép chuyển ca khám sang cho bác sĩ khác");
+
+        // 4. Bác sĩ bs02 xóa ca 100L thuộc về bs01 -> 403
+        sampleShift.setBookedSlots(0);
+        assertThatThrownBy(() -> shiftService.deleteShift(100L, "bs02"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Bác sĩ chỉ được phép xóa ca khám do chính mình phụ trách");
+
+        // 5. Bác sĩ bs01 xóa ca 100L của chính mình khi chưa có lịch hẹn -> Thành công
+        shiftService.deleteShift(100L, "bs01");
+        verify(shiftRepository).delete(sampleShift);
     }
 
     @Test

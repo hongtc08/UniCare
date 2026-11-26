@@ -201,7 +201,7 @@ class MoodLogControllerTest {
                         .content(requestJson))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Bạn không có quyền thực hiện thao tác này"));
+                .andExpect(jsonPath("$.message").value("Sinh viên chỉ được phép cập nhật nhật ký tâm trạng của chính mình"));
 
         mockMvc.perform(put("/api/mental-health/mood-logs/abc")
                         .principal(studentPrincipal)

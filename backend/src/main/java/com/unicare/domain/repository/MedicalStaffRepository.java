@@ -13,4 +13,8 @@ import java.util.Optional;
 public interface MedicalStaffRepository extends JpaRepository<MedicalStaff, Long> {
 
     Optional<MedicalStaff> findByStaffCode(String staffCode);
+
+    boolean existsByStaffCodeIgnoreCase(String staffCode);
+
+    boolean existsByStaffCodeIgnoreCaseAndIdNot(String staffCode, Long id);
 }
