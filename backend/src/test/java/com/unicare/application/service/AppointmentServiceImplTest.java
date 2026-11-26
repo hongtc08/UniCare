@@ -350,18 +350,17 @@ class AppointmentServiceImplTest {
     }
 
     @Test
-    @DisplayName("Hủy lịch hẹn thành công bởi Quản trị viên (BAN_QUAN_LY)")
-    void cancelAppointment_Success_ByAdmin() {
+    @DisplayName("Hủy lịch hẹn: Chặn Ban quản lý (BAN_QUAN_LY) hủy lịch hẹn cá nhân của sinh viên")
+    void cancelAppointment_AccessDenied_ByAdmin() {
         when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
         when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
-        when(shiftRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(currentShift));
-        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(i -> i.getArgument(0));
 
         CancelAppointmentRequest request = new CancelAppointmentRequest("Ban quản lý điều chỉnh lịch");
-        AppointmentResponse response = appointmentService.cancelAppointment(1L, request, "admin01");
+        assertThatThrownBy(() -> appointmentService.cancelAppointment(1L, request, "admin01"))
+                .isInstanceOf(AccessDeniedException.class);
 
-        assertThat(response.getStatus()).isEqualTo("CANCELED");
-        assertThat(response.getCanceledBy()).isEqualTo("DOCTOR");
+        verify(shiftRepository, never()).findByIdForUpdate(any());
+        verify(appointmentRepository, never()).save(any());
     }
 
     @Test
@@ -674,6 +673,25 @@ class AppointmentServiceImplTest {
         when(userRepository.findByUsername("sv002")).thenReturn(Optional.of(otherStudentUser));
         assertThatThrownBy(() -> appointmentService.getAppointmentById(1L, "sv002"))
                 .isInstanceOf(AccessDeniedException.class);
+
+        // Ban quản lý xem chi tiết lịch hẹn (có triệu chứng) -> AccessDeniedException
+        when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+        assertThatThrownBy(() -> appointmentService.getAppointmentById(1L, "admin01"))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("Dời lịch hẹn: Chặn Ban quản lý (BAN_QUAN_LY) dời lịch hẹn của sinh viên")
+    void rescheduleAppointment_AccessDenied_ByAdmin() {
+        when(userRepository.findByUsername("admin01")).thenReturn(Optional.of(adminUser));
+        when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
+
+        RescheduleAppointmentRequest request = new RescheduleAppointmentRequest(102L, "Ban quản lý dời lịch");
+        assertThatThrownBy(() -> appointmentService.rescheduleAppointment(1L, request, "admin01"))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(shiftRepository, never()).findByIdForUpdate(any());
+        verify(appointmentRepository, never()).save(any());
     }
 
     @Test

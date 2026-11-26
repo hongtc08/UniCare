@@ -24,11 +24,11 @@ public class HealthInsuranceController {
     }
 
     /**
-     * Lấy danh sách thẻ BHYT (Quản lý/Y tế xem tất cả và lọc; Sinh viên chỉ xem thẻ của chính mình)
+     * Lấy danh sách thẻ BHYT (Nhân viên y tế xem tất cả và lọc; Sinh viên chỉ xem thẻ của chính mình)
      * GET /api/health-insurances?search=...&status=...
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE', 'SINH_VIEN')")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN_Y_TE', 'SINH_VIEN')")
     public ResponseEntity<ApiResponse<List<HealthInsuranceResponse>>> getHealthInsurances(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String status,
@@ -44,7 +44,7 @@ public class HealthInsuranceController {
      * GET /api/health-insurances/{id}
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE', 'SINH_VIEN')")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN_Y_TE', 'SINH_VIEN')")
     public ResponseEntity<ApiResponse<HealthInsuranceResponse>> getHealthInsuranceById(
             @PathVariable Long id,
             Principal principal
@@ -59,7 +59,7 @@ public class HealthInsuranceController {
      * GET /api/health-insurances/student/{studentId}
      */
     @GetMapping("/student/{studentId}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE', 'SINH_VIEN')")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN_Y_TE', 'SINH_VIEN')")
     public ResponseEntity<ApiResponse<HealthInsuranceResponse>> getHealthInsuranceByStudentId(
             @PathVariable Long studentId,
             Principal principal
@@ -74,7 +74,7 @@ public class HealthInsuranceController {
      * POST /api/health-insurances
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE', 'SINH_VIEN')")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN_Y_TE', 'SINH_VIEN')")
     public ResponseEntity<ApiResponse<HealthInsuranceResponse>> createHealthInsurance(
             @Valid @RequestBody HealthInsuranceRequest request,
             Principal principal
@@ -90,7 +90,7 @@ public class HealthInsuranceController {
      * PUT /api/health-insurances/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE', 'SINH_VIEN')")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN_Y_TE', 'SINH_VIEN')")
     public ResponseEntity<ApiResponse<HealthInsuranceResponse>> updateHealthInsurance(
             @PathVariable Long id,
             @Valid @RequestBody HealthInsuranceRequest request,
@@ -106,7 +106,7 @@ public class HealthInsuranceController {
      * DELETE /api/health-insurances/{id}
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('NHAN_VIEN_Y_TE')")
     public ResponseEntity<ApiResponse<Void>> deleteHealthInsurance(
             @PathVariable Long id,
             Principal principal

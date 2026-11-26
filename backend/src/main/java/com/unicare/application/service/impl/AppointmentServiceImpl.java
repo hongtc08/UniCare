@@ -337,14 +337,17 @@ public class AppointmentServiceImpl implements AppointmentService {
                 .orElseThrow(
                         () -> new ResourceNotFoundException("Không tìm thấy lịch hẹn với mã ID: " + appointmentId));
 
-        if (currentUser.getRole() == Role.SINH_VIEN && !appointment.getStudent().getId().equals(currentUser.getId())) {
-            throw new AccessDeniedException("Sinh viên chỉ được phép xem thông tin lịch hẹn của chính mình");
-        }
-
-        if (currentUser.getRole() == Role.NHAN_VIEN_Y_TE
-                && !appointment.getShift().getStaff().getId().equals(currentUser.getId())) {
-            throw new AccessDeniedException(
-                    "Bác sĩ chỉ được phép xem thông tin lịch hẹn thuộc ca khám do mình phụ trách");
+        if (currentUser.getRole() == Role.SINH_VIEN) {
+            if (!appointment.getStudent().getId().equals(currentUser.getId())) {
+                throw new AccessDeniedException("Sinh viên chỉ được phép xem thông tin lịch hẹn của chính mình");
+            }
+        } else if (currentUser.getRole() == Role.NHAN_VIEN_Y_TE) {
+            if (!appointment.getShift().getStaff().getId().equals(currentUser.getId())) {
+                throw new AccessDeniedException(
+                        "Bác sĩ chỉ được phép xem thông tin lịch hẹn thuộc ca khám do mình phụ trách");
+            }
+        } else {
+            throw new AccessDeniedException("Người dùng không có quyền xem thông tin chi tiết lịch hẹn");
         }
 
         return AppointmentResponse.fromEntity(appointment);
@@ -392,10 +395,6 @@ public class AppointmentServiceImpl implements AppointmentService {
                 throw new AccessDeniedException(
                         "Bác sĩ chỉ được phép " + actionName + " lịch hẹn thuộc ca khám do mình phụ trách");
             }
-            return ACTOR_DOCTOR;
-        }
-
-        if (currentUser.getRole() == Role.BAN_QUAN_LY) {
             return ACTOR_DOCTOR;
         }
 

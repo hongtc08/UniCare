@@ -45,7 +45,7 @@ public class AppointmentController {
      * PUT /api/appointments/{id}/cancel
      */
     @PutMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('SINH_VIEN', 'NHAN_VIEN_Y_TE', 'BAN_QUAN_LY')")
+    @PreAuthorize("hasAnyRole('SINH_VIEN', 'NHAN_VIEN_Y_TE')")
     public ResponseEntity<ApiResponse<AppointmentResponse>> cancelAppointment(
             @PathVariable Long id,
             @Valid @RequestBody CancelAppointmentRequest request,
@@ -60,7 +60,7 @@ public class AppointmentController {
      * PUT /api/appointments/{id}/reschedule
      */
     @PutMapping("/{id}/reschedule")
-    @PreAuthorize("hasAnyRole('SINH_VIEN', 'NHAN_VIEN_Y_TE', 'BAN_QUAN_LY')")
+    @PreAuthorize("hasAnyRole('SINH_VIEN', 'NHAN_VIEN_Y_TE')")
     public ResponseEntity<ApiResponse<AppointmentResponse>> rescheduleAppointment(
             @PathVariable Long id,
             @Valid @RequestBody RescheduleAppointmentRequest request,
@@ -89,7 +89,7 @@ public class AppointmentController {
      * GET /api/appointments/{id}
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SINH_VIEN', 'NHAN_VIEN_Y_TE', 'BAN_QUAN_LY')")
+    @PreAuthorize("hasAnyRole('SINH_VIEN', 'NHAN_VIEN_Y_TE')")
     public ResponseEntity<ApiResponse<AppointmentResponse>> getAppointmentById(
             @PathVariable Long id,
             Principal principal) {

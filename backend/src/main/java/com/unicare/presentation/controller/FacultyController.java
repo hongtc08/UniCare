@@ -51,7 +51,7 @@ public class FacultyController {
      * POST /api/faculties
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('BAN_QUAN_LY')")
     public ResponseEntity<ApiResponse<FacultyResponse>> createFaculty(
             @Valid @RequestBody FacultyRequest request
     ) {
@@ -65,7 +65,7 @@ public class FacultyController {
      * PUT /api/faculties/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('BAN_QUAN_LY')")
     public ResponseEntity<ApiResponse<FacultyResponse>> updateFaculty(
             @PathVariable Integer id,
             @Valid @RequestBody FacultyRequest request
@@ -79,7 +79,7 @@ public class FacultyController {
      * DELETE /api/faculties/{id}
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('BAN_QUAN_LY', 'NHAN_VIEN_Y_TE')")
+    @PreAuthorize("hasRole('BAN_QUAN_LY')")
     public ResponseEntity<ApiResponse<Void>> deleteFaculty(@PathVariable Integer id) {
         facultyService.deleteFaculty(id);
         return ResponseEntity.ok(ApiResponse.success("Xóa khoa thành công", null));
