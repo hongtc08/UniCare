@@ -20,10 +20,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByUsernameIgnoreCase(String username);
 
+    boolean existsByEmailIgnoreCase(String email);
+
     boolean existsByEmailIgnoreCaseAndIdNot(String email, Long id);
 
-    @Query("SELECT u FROM User u WHERE " +
-       "(:search = '' OR " +
+    @Query("SELECT u FROM User u " +
+       "LEFT JOIN FETCH u.student s " +
+       "LEFT JOIN FETCH s.academicClass ac " +
+       "LEFT JOIN FETCH ac.faculty f " +
+       "LEFT JOIN FETCH u.medicalStaff ms " +
+       "LEFT JOIN FETCH u.managementStaff mgs " +
+       "WHERE (:search = '' OR " +
        "LOWER(u.username) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
        "LOWER(u.fullName) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
        "(:role IS NULL OR u.role = :role) AND " +

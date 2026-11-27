@@ -21,6 +21,7 @@ import com.unicare.domain.enums.UserStatus;
 import com.unicare.domain.repository.MedicalStaffRepository;
 import com.unicare.domain.repository.ShiftRepository;
 import com.unicare.domain.repository.UserRepository;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +29,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -155,6 +157,11 @@ public class ShiftServiceImpl implements ShiftService {
         validateTimeRange(request.getStartTime(), request.getEndTime());
 
         MedicalStaff staff = resolveAndValidateStaff(request.getDoctorId(), currentUsername, null);
+        enforceDoctorShiftOwnership(
+                currentUsername,
+                staff.getId(),
+                "Bác sĩ chỉ được phép mở ca khám cho chính mình"
+        );
 
         boolean overlapping = shiftRepository.existsOverlappingShift(
                 staff.getId(),
@@ -207,9 +214,21 @@ public class ShiftServiceImpl implements ShiftService {
         Shift shift = shiftRepository.findByIdWithDoctor(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ca khám với mã ID: " + id));
 
+        Long existingStaffId = shift.getStaff() != null ? shift.getStaff().getId() : null;
+        enforceDoctorShiftOwnership(
+                currentUsername,
+                existingStaffId,
+                "Bác sĩ chỉ được phép chỉnh sửa ca khám do chính mình phụ trách"
+        );
+
         validateTimeRange(request.getStartTime(), request.getEndTime());
 
         MedicalStaff staff = resolveAndValidateStaff(request.getDoctorId(), currentUsername, shift.getStaff());
+        enforceDoctorShiftOwnership(
+                currentUsername,
+                staff.getId(),
+                "Bác sĩ không được phép chuyển ca khám sang cho bác sĩ khác"
+        );
 
         int bookedQty = shift.getBookedSlots() != null ? shift.getBookedSlots() : 0;
 
@@ -286,9 +305,16 @@ public class ShiftServiceImpl implements ShiftService {
 
     @Override
     @Transactional
-    public void deleteShift(Long id) {
+    public void deleteShift(Long id, String currentUsername) {
         Shift shift = shiftRepository.findByIdWithDoctor(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ca khám với mã ID: " + id));
+
+        Long existingStaffId = shift.getStaff() != null ? shift.getStaff().getId() : null;
+        enforceDoctorShiftOwnership(
+                currentUsername,
+                existingStaffId,
+                "Bác sĩ chỉ được phép xóa ca khám do chính mình phụ trách"
+        );
 
         int bookedQty = shift.getBookedSlots() != null ? shift.getBookedSlots() : 0;
         if (bookedQty > 0) {
@@ -298,6 +324,19 @@ public class ShiftServiceImpl implements ShiftService {
         }
 
         shiftRepository.delete(shift);
+    }
+
+    private void enforceDoctorShiftOwnership(String currentUsername, Long targetStaffId, String deniedMessage) {
+        if (currentUsername == null || currentUsername.isBlank()) {
+            return;
+        }
+        Optional<User> actorOpt = userRepository.findByUsername(currentUsername.trim());
+        if (actorOpt.isPresent() && actorOpt.get().getRole() == Role.NHAN_VIEN_Y_TE) {
+            Long actorId = actorOpt.get().getId();
+            if (targetStaffId == null || !targetStaffId.equals(actorId)) {
+                throw new AccessDeniedException(deniedMessage);
+            }
+        }
     }
 
     private void validateTimeRange(LocalTime startTime, LocalTime endTime) {
@@ -350,8 +389,8 @@ public class ShiftServiceImpl implements ShiftService {
                             .user(doctor)
                             .id(doctor.getId())
                             .staffCode("BS" + String.format("%04d", doctor.getId()))
-                            .title("Bác sĩ")
-                            .specialty("Đa khoa")
+                            .title("BAC_SI")
+                            .specialty("DA_KHOA")
                             .build();
                     return medicalStaffRepository.save(newStaff);
                 });
