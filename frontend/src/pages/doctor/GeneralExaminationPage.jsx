@@ -12,6 +12,7 @@ import {
   Building2,
 } from "lucide-react";
 import { medicalRecordApi, CHECKUP_TYPES } from "../../api/medicalRecordApi";
+import { doctorMentalHealthApi } from "../../api/doctorMentalHealthApi";
 import Toast from "../../components/common/Toast";
 import GeneralCheckupForm from "../../components/checkup/GeneralCheckupForm";
 import PatientOverviewWrapper from "../../components/checkup/PatientOverviewWrapper";
@@ -19,6 +20,8 @@ import PrescriptionTable from "../../components/checkup/PrescriptionTable";
 import CompleteCheckupModal from "../../components/checkup/CompleteCheckupModal";
 import TransferRecordModal from "../../components/checkup/TransferRecordModal";
 import TransferReferralPrintModal from "../../components/checkup/TransferReferralPrintModal";
+import DassHistoryChart from "../../components/checkup/DassHistoryChart";
+import StudentMoodLogHistory from "../../components/checkup/StudentMoodLogHistory";
 import { createEmptyMedicine, validateAndCleanMedicines } from "../../utils/prescription";
 import {
   validateCheckupForm,
@@ -58,6 +61,15 @@ export default function GeneralExaminationPage() {
   const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
   const [transferApiError, setTransferApiError] = useState(null);
   const [printModalOpen, setPrintModalOpen] = useState(false);
+
+  // State lịch sử DASS-21 & Nhật ký tâm trạng (chỉ nạp khi Tư vấn Tâm lý)
+  const [moodPeriod, setMoodPeriod] = useState("MONTH");
+  const [mentalHealthRevision, setMentalHealthRevision] = useState(0);
+  const [mentalHealthState, setMentalHealthState] = useState({
+    key: null,
+    data: null,
+    error: null,
+  });
 
   // Form state lâm sàng (Khớp với Create/UpdateMedicalCheckupRequest DTO)
   const [formData, setFormData] = useState({
@@ -292,6 +304,65 @@ export default function GeneralExaminationPage() {
     checkupDetail?.studentId ||
     appointmentData?.studentId ||
     (studentIdParam ? Number(studentIdParam) : null);
+
+  const isPsychologicalMode = isPsychologicalCheckup(formData.checkupType);
+  const shouldLoadMentalHealth = isPsychologicalMode && Boolean(effectiveStudentId);
+  const mentalHealthKey = shouldLoadMentalHealth
+    ? `${effectiveStudentId}|${moodPeriod}|${mentalHealthRevision}`
+    : null;
+  const mentalHealthLoading =
+    Boolean(mentalHealthKey) && mentalHealthState.key !== mentalHealthKey;
+  const mentalHealthData =
+    mentalHealthState.key === mentalHealthKey ? mentalHealthState.data : null;
+  const mentalHealthError =
+    mentalHealthState.key === mentalHealthKey ? mentalHealthState.error : null;
+
+  // Chỉ gọi API lịch sử DASS-21 & Nhật ký tâm trạng khi ở chế độ Tư vấn Tâm lý và đã có studentId
+  useEffect(() => {
+    if (!shouldLoadMentalHealth || !mentalHealthKey) {
+      return undefined;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+
+    doctorMentalHealthApi
+      .getStudentMentalHealthHistory(
+        effectiveStudentId,
+        { period: moodPeriod },
+        controller.signal
+      )
+      .then((data) => {
+        if (!active) return;
+        setMentalHealthState({
+          key: mentalHealthKey,
+          data: data || null,
+          error: null,
+        });
+      })
+      .catch((err) => {
+        if (!active || err?.name === "CanceledError" || err?.code === "ERR_CANCELED") {
+          return;
+        }
+        setMentalHealthState({
+          key: mentalHealthKey,
+          data: null,
+          error:
+            err?.response?.data?.message ||
+            err?.message ||
+            "Không thể tải lịch sử DASS-21 và nhật ký tâm trạng của sinh viên.",
+        });
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [shouldLoadMentalHealth, effectiveStudentId, moodPeriod, mentalHealthKey]);
+
+  const handleRetryMentalHealth = () => {
+    setMentalHealthRevision((prev) => prev + 1);
+  };
 
   const fallbackStudentData = {
     studentName: checkupDetail?.studentName || appointmentData?.studentName || "",
@@ -598,7 +669,6 @@ export default function GeneralExaminationPage() {
     }
   };
 
-  const isPsychologicalMode = isPsychologicalCheckup(formData.checkupType);
   const isPeriodicMode = !isPsychologicalMode && Boolean(formData.isPeriodic);
   const checkupModeTitle = isPsychologicalMode
     ? "Phiếu Tư Vấn Tâm Lý"
@@ -839,6 +909,27 @@ export default function GeneralExaminationPage() {
                 isReadOnly={isReadOnly}
                 rowErrors={prescriptionErrors}
               />
+            )}
+
+            {/* Biểu đồ diễn biến DASS-21 & Nhật ký tâm trạng chỉ đọc (Chỉ hiển thị khi Tư vấn Tâm lý) */}
+            {isPsychologicalMode && effectiveStudentId && (
+              <div className="space-y-4">
+                <DassHistoryChart
+                  scoreTrend={mentalHealthData?.dass21ScoreTrend || []}
+                  latestResult={mentalHealthData?.latestDass21 || null}
+                  loading={mentalHealthLoading}
+                  error={mentalHealthError}
+                  onRetry={handleRetryMentalHealth}
+                />
+                <StudentMoodLogHistory
+                  moodHistory={mentalHealthData?.moodHistory || null}
+                  loading={mentalHealthLoading}
+                  error={mentalHealthError}
+                  onRetry={handleRetryMentalHealth}
+                  period={moodPeriod}
+                  onPeriodChange={setMoodPeriod}
+                />
+              </div>
             )}
 
             {/* CỤM NÚT DƯỚI FORM */}
